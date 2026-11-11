@@ -40,3 +40,4 @@ export async function DELETE(request, { params }) {
     return Response.json({ error: "Failed to delete address" }, { status: 500 });
   }
 }
+

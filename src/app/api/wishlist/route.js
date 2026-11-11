@@ -93,3 +93,4 @@ export async function DELETE(request) {
     return Response.json({ error: "Failed to remove from wishlist" }, { status: 500 });
   }
 }
+

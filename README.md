@@ -139,3 +139,4 @@ node --env-file=.env test-e2e-suite.mjs
 - **Store**: Sri Usha Vet & Pet Stores
 - **Location**: Uppal, Hyderabad, Telangana, India
 - **Phone**: +91 98765 43210
+

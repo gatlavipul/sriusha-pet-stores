@@ -78,3 +78,4 @@ export function sanitizeText(text, maxLength = 1000) {
   if (!text) return "";
   return String(text).trim().slice(0, maxLength);
 }
+
