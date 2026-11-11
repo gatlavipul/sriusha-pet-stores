@@ -9,7 +9,7 @@ export const executeSql = async (stringsOrQuery, ...values) => {
     );
   }
 
-  const maxAttempts = 5;
+  const maxAttempts = 7;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       if (typeof stringsOrQuery === 'string') {
@@ -21,6 +21,7 @@ export const executeSql = async (stringsOrQuery, ...values) => {
         err?.message?.includes('fetch failed') ||
         err?.message?.includes('timeout') ||
         err?.message?.includes('Connection') ||
+        err?.message?.includes('connect') ||
         err?.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
         err?.cause?.code === 'ECONNRESET' ||
         err?.cause?.code === 'ETIMEDOUT' ||
@@ -28,8 +29,9 @@ export const executeSql = async (stringsOrQuery, ...values) => {
         err?.code === 'ECONNRESET';
 
       if (isNetworkError && attempt < maxAttempts) {
-        console.warn(`[Neon SQL] Transient network error on attempt ${attempt}. Retrying in ${attempt * 800}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+        const delay = Math.min(6000, 1000 * Math.pow(1.4, attempt));
+        console.warn(`[Neon SQL] Transient network error on attempt ${attempt}. Retrying in ${Math.round(delay)}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw err;

@@ -1,20 +1,17 @@
-async function upload({
-  url,
-  buffer,
-  base64
-}) {
-  const response = await fetch(`https://api.anything.com/v0/upload`, {
-    method: "POST",
-    headers: {
-      "Content-Type": buffer ? "application/octet-stream" : "application/json"
-    },
-    body: buffer ? buffer : JSON.stringify({ base64, url })
-  });
-  const data = await response.json();
-  return {
-    url: data.url,
-    mimeType: data.mimeType || null
-  };
+/**
+ * Sri Usha Vet & Pet Stores - Upload utility abstraction
+ */
+import { uploadImage } from "@/utils/storageService";
+
+export async function upload({ file, url, buffer, base64 }) {
+  if (file) {
+    return await uploadImage(file);
+  }
+  // If remote URL is passed, return as is
+  if (url) {
+    return { url };
+  }
+  return { url: null };
 }
-export { upload };
+
 export default upload;

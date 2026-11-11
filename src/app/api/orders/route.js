@@ -8,6 +8,7 @@ import {
   checkAndTriggerLowStock,
   NOTIFICATION_TYPES,
 } from "@/utils/notificationService";
+import { rateLimiter, getClientIp } from "@/utils/rateLimiter";
 import logger from "@/utils/logger";
 
 export async function GET() {
@@ -47,6 +48,19 @@ export async function GET() {
 
 export async function POST(request) {
   try {
+    // 0. Rate limiting protection on order placement
+    const clientIp = getClientIp(request);
+    const rateCheck = rateLimiter.check(`checkout:${clientIp}`, 20, 10 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return Response.json(
+        { error: "Too many orders submitted in a short time. Please wait a few moments before trying again." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(rateCheck.resetMs / 1000)) },
+        }
+      );
+    }
+
     const session = await auth();
     const body = await request.json();
 

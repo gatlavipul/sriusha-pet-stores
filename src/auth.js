@@ -5,7 +5,8 @@
 import CreateAuth from "@auth/create";
 import Credentials from "@auth/core/providers/credentials";
 import { CredentialsSignin } from "@auth/core/errors";
-import { neon } from "@neondatabase/serverless";
+import sql from "@/app/api/utils/sql";
+import { rateLimiter } from "@/utils/rateLimiter";
 import bcrypt from "bcryptjs";
 
 function Adapter(client) {
@@ -207,16 +208,10 @@ function Adapter(client) {
   };
 }
 
-const getSqlClient = () => {
-  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
-  return neon(process.env.DATABASE_URL);
-};
-
 const mockClient = {
   query: async (queryText, params) => {
-    const sqlClient = getSqlClient();
-    const rows = await sqlClient(queryText, params);
-    return { rows, rowCount: rows.length };
+    const rows = await sql(queryText, params || []);
+    return { rows, rowCount: rows ? rows.length : 0 };
   },
 };
 
@@ -237,6 +232,15 @@ export const { auth } = CreateAuth({
         if (typeof email !== "string" || typeof password !== "string") return null;
 
         const cleanEmail = email.toLowerCase().trim();
+
+        // Brute-force protection: check rate limit for this email
+        const rateCheck = rateLimiter.check(`signin:${cleanEmail}`, 10, 15 * 60 * 1000);
+        if (!rateCheck.allowed) {
+          const error = new CredentialsSignin();
+          error.code = "too-many-attempts";
+          throw error;
+        }
+
         const user = await adapter.getUserByEmail(cleanEmail);
         if (!user) {
           const error = new CredentialsSignin();
@@ -256,6 +260,9 @@ export const { auth } = CreateAuth({
         if (!isValid) {
           throw new CredentialsSignin();
         }
+
+        // Reset rate limiter on successful authentication
+        rateLimiter.reset(`signin:${cleanEmail}`);
 
         // Return user profile including verified database role
         return {

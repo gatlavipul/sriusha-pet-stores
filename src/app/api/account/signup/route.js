@@ -1,9 +1,27 @@
 import sql from "@/app/api/utils/sql";
 import { validateEmail, sanitizeText } from "@/app/api/utils/security";
+import { rateLimiter, getClientIp, RATE_LIMIT_PROFILES } from "@/utils/rateLimiter";
 import bcrypt from "bcryptjs";
 
 export async function POST(request) {
   try {
+    // 0. Rate limiting check (Prevent spam account creation)
+    const clientIp = getClientIp(request);
+    const rateCheck = rateLimiter.check(
+      `signup:${clientIp}`,
+      RATE_LIMIT_PROFILES.AUTH_SIGNUP.maxRequests,
+      RATE_LIMIT_PROFILES.AUTH_SIGNUP.windowMs
+    );
+    if (!rateCheck.allowed) {
+      return Response.json(
+        { error: "Too many registration attempts. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(rateCheck.resetMs / 1000)) },
+        }
+      );
+    }
+
     const body = await request.json();
     const { name, email, password } = body || {};
 

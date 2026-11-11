@@ -240,3 +240,5 @@ export default function useCart() {
     refreshCart,
   };
 }
+
+export { useCart };

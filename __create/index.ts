@@ -22,10 +22,39 @@ app.use('/api/auth/*', initAuthConfig((c) => {
 }));
 app.use('/api/auth/*', authHandler());
 
-// Minimal middleware
+// Security Headers & Request Auditing Middleware
 app.use('*', async (c, next) => {
-  console.log(`[Request] ${c.req.method} ${c.req.url}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Request] ${c.req.method} ${c.req.url}`);
+  }
+
   await next();
+
+  // Standard Security Headers
+  c.res.headers.set('X-Content-Type-Options', 'nosniff');
+  c.res.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  c.res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+  if (process.env.NODE_ENV === 'production') {
+    c.res.headers.set(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload'
+    );
+  }
+
+  // Content-Security-Policy tailored for Sri Usha storefront & Razorpay integration
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https:",
+    "frame-src 'self' https://api.razorpay.com",
+  ].join('; ');
+
+  c.res.headers.set('Content-Security-Policy', csp);
 });
 
 // Routes
