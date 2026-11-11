@@ -15,6 +15,13 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
+import {
+  ORDER_STATUS,
+  ORDER_STATUS_METADATA,
+  CUSTOMER_TIMELINE_STAGES,
+  isCancellableByCustomer,
+  getStatusBadgeClass,
+} from "@/utils/orderWorkflow";
 
 export default function OrderDetailPage({ params }) {
   const { data: user } = useUser();
@@ -82,16 +89,6 @@ export default function OrderDetailPage({ params }) {
     }
   };
 
-  const getStatusColor = (status) => {
-    const s = (status || "").toLowerCase();
-    if (s === "delivered") return "border-emerald-300 bg-emerald-50 text-emerald-800";
-    if (s === "shipped") return "border-indigo-300 bg-indigo-50 text-indigo-800";
-    if (s === "packed") return "border-purple-300 bg-purple-50 text-purple-800";
-    if (s === "confirmed" || s === "processing") return "border-blue-300 bg-blue-50 text-blue-800";
-    if (s === "cancelled") return "border-red-300 bg-red-50 text-red-800";
-    return "border-amber-300 bg-amber-50 text-amber-800";
-  };
-
   const handlePrint = () => {
     if (typeof window !== "undefined") {
       window.print();
@@ -131,13 +128,32 @@ export default function OrderDetailPage({ params }) {
     );
   }
 
-  const isCancellable = ["pending", "processing", "confirmed"].includes((order.status || "").toLowerCase());
   const orderNumber = order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`;
-
-  // Calculate timeline state
   const s = (order.status || "").toLowerCase();
-  const step = s === "delivered" ? 4 : s === "shipped" ? 3 : s === "packed" ? 2 : 1;
   const isCancelled = s === "cancelled";
+  const isFailed = s === "delivery_failed";
+  const canCancel = isCancellableByCustomer(s);
+
+  // Active step in 6-stage timeline
+  const getTimelineStep = (status) => {
+    switch (status) {
+      case ORDER_STATUS.PLACED: return 1;
+      case ORDER_STATUS.CONFIRMED: return 2;
+      case ORDER_STATUS.PACKING: return 3;
+      case ORDER_STATUS.READY_FOR_DELIVERY:
+      case ORDER_STATUS.ASSIGNED: return 4;
+      case ORDER_STATUS.OUT_FOR_DELIVERY: return 5;
+      case ORDER_STATUS.DELIVERED: return 6;
+      default: return 1;
+    }
+  };
+
+  const currentStep = getTimelineStep(s);
+  const metadata = ORDER_STATUS_METADATA[s] || {
+    customerLabel: order.status,
+    customerDescription: "Order in progress",
+    badgeClass: "bg-gray-100 text-gray-800 border-gray-200",
+  };
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] text-[#0F172A]">
@@ -155,7 +171,7 @@ export default function OrderDetailPage({ params }) {
           </a>
 
           <div className="flex items-center gap-2">
-            {isCancellable && (
+            {canCancel && (
               <button
                 onClick={() => setShowCancelModal(true)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50/60 px-3.5 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 transition-colors"
@@ -230,11 +246,9 @@ export default function OrderDetailPage({ params }) {
 
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${getStatusColor(
-                  order.status
-                )}`}
+                className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${metadata.badgeClass}`}
               >
-                Status: {order.status || "Processing"}
+                {metadata.customerLabel}
               </span>
               <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-700">
                 Payment: {(order.payment_method || "cod").toUpperCase()} ({order.payment_status || "Pending"})
@@ -262,60 +276,60 @@ export default function OrderDetailPage({ params }) {
             </div>
           )}
 
-          {/* Tracking Progress Timeline (if not cancelled) */}
+          {/* Delivery Exception Alert if Delivery Attempt Failed */}
+          {isFailed && (
+            <div className="my-6 rounded-2xl border border-amber-300 bg-amber-50/80 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-bold text-amber-950">Delivery Attempt Unsuccessful</h4>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Our delivery partner was unable to complete the delivery on this run ({order.delivery_failure_reason || "Customer unavailable"}).
+                  </p>
+                  <p className="text-xs text-amber-900 font-semibold mt-1">
+                    Don&apos;t worry! Our store dispatch team is reviewing your address and will arrange a re-delivery attempt shortly.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6-Stage Customer Tracking Progress Timeline (if not cancelled) */}
           {!isCancelled && (
             <div className="py-6 border-b border-gray-100">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">
-                Order Timeline
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Live Order Timeline
+                </div>
+                <div className="text-xs text-gray-500 font-medium italic">
+                  {metadata.customerDescription}
+                </div>
               </div>
-              <div className="grid grid-cols-4 text-center text-xs relative">
-                <div className="space-y-1">
-                  <div
-                    className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full font-bold ${
-                      step >= 1 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
-                    }`}
-                  >
-                    ✓
-                  </div>
-                  <div className="font-bold text-gray-900">Order Placed</div>
-                  <div className="text-[10px] text-gray-400">Received</div>
-                </div>
 
-                <div className="space-y-1">
-                  <div
-                    className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full font-bold ${
-                      step >= 2 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
-                    }`}
-                  >
-                    2
-                  </div>
-                  <div className="font-bold text-gray-900">Packed</div>
-                  <div className="text-[10px] text-gray-400">Store Prep</div>
-                </div>
+              <div className="grid grid-cols-6 text-center text-xs relative gap-1">
+                {CUSTOMER_TIMELINE_STAGES.map((stage) => {
+                  const isCompleted = currentStep >= stage.step;
+                  const isCurrent = currentStep === stage.step;
 
-                <div className="space-y-1">
-                  <div
-                    className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full font-bold ${
-                      step >= 3 ? "bg-indigo-600 text-white" : "bg-gray-200 text-gray-600"
-                    }`}
-                  >
-                    3
-                  </div>
-                  <div className="font-semibold text-gray-600">Dispatched</div>
-                  <div className="text-[10px] text-gray-400">Out for delivery</div>
-                </div>
-
-                <div className="space-y-1">
-                  <div
-                    className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full font-bold ${
-                      step >= 4 ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-600"
-                    }`}
-                  >
-                    4
-                  </div>
-                  <div className="font-semibold text-gray-600">Delivered</div>
-                  <div className="text-[10px] text-gray-400">At Doorstep</div>
-                </div>
+                  return (
+                    <div key={stage.key} className="space-y-1">
+                      <div
+                        className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                          isCompleted
+                            ? isCurrent
+                              ? "bg-[#2563EB] text-white ring-4 ring-blue-100"
+                              : "bg-emerald-600 text-white"
+                            : "bg-gray-100 text-gray-400"
+                        }`}
+                      >
+                        {isCompleted && !isCurrent ? "✓" : stage.step}
+                      </div>
+                      <div className={`font-bold text-[11px] leading-tight ${isCompleted ? "text-gray-900" : "text-gray-400"}`}>
+                        {stage.label}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

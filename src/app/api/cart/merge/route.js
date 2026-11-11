@@ -75,3 +75,4 @@ export async function POST(request) {
     return Response.json({ error: "Failed to merge cart items" }, { status: 500 });
   }
 }
+

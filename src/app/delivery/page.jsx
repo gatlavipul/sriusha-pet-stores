@@ -12,8 +12,19 @@ import {
   IndianRupee,
   AlertTriangle,
   RotateCcw,
+  XCircle,
 } from "lucide-react";
 import { signOut } from "@auth/create/react";
+
+const FAILURE_REASONS = [
+  "Customer unavailable / phone unreachable",
+  "Customer requested delivery reschedule",
+  "Incorrect or incomplete address",
+  "Customer refused package at doorstep",
+  "Payment issue / customer does not have cash",
+  "Weather / road closure obstruction",
+  "Other exception",
+];
 
 export default function DeliveryPartnerPage() {
   const { data: user, loading: userLoading } = useUser();
@@ -23,6 +34,12 @@ export default function DeliveryPartnerPage() {
   const [authError, setAuthError] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [updatingId, setUpdatingId] = useState(null);
+
+  // Failure modal state
+  const [failureModalOrder, setFailureModalOrder] = useState(null);
+  const [selectedReason, setSelectedReason] = useState(FAILURE_REASONS[0]);
+  const [customReason, setCustomReason] = useState("");
+  const [submittingFailure, setSubmittingFailure] = useState(false);
 
   useEffect(() => {
     if (!userLoading && !user) {
@@ -84,6 +101,48 @@ export default function DeliveryPartnerPage() {
     }
   };
 
+  const handleReportFailure = async (e) => {
+    e.preventDefault();
+    if (!failureModalOrder) return;
+
+    const reason = selectedReason === "Other exception" && customReason.trim()
+      ? customReason.trim()
+      : selectedReason;
+
+    if (!reason || reason.trim().length < 3) {
+      alert("Please provide a valid failure reason.");
+      return;
+    }
+
+    setSubmittingFailure(true);
+    try {
+      const res = await fetch(`/api/delivery/orders/${failureModalOrder.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "delivery_failed",
+          failure_reason: reason,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Failed to report delivery failure");
+        return;
+      }
+
+      setFailureModalOrder(null);
+      setSelectedReason(FAILURE_REASONS[0]);
+      setCustomReason("");
+      await fetchDeliveryOrders();
+    } catch (err) {
+      console.error(err);
+      alert("Network error submitting delivery issue");
+    } finally {
+      setSubmittingFailure(false);
+    }
+  };
+
   if (userLoading || loading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FA] p-4">
@@ -122,10 +181,12 @@ export default function DeliveryPartnerPage() {
   const assignedCount = orders.filter((o) => o.status === "assigned" || o.status === "ready_for_delivery" || o.status === "packed").length;
   const activeCount = orders.filter((o) => o.status === "out_for_delivery").length;
   const deliveredCount = orders.filter((o) => o.status === "delivered").length;
+  const failedCount = orders.filter((o) => o.status === "delivery_failed").length;
 
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === "active") return o.status === "out_for_delivery" || o.status === "assigned" || o.status === "ready_for_delivery" || o.status === "packed";
     if (statusFilter === "delivered") return o.status === "delivered";
+    if (statusFilter === "failed") return o.status === "delivery_failed";
     return true;
   });
 
@@ -175,7 +236,7 @@ export default function DeliveryPartnerPage() {
 
       <main className="mx-auto max-w-4xl px-4 pt-6 sm:px-6">
         {/* KPI Summary Cards */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 text-center shadow-2xs">
             <div className="text-xl font-extrabold text-amber-900">{assignedCount}</div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 mt-0.5">
@@ -194,10 +255,16 @@ export default function DeliveryPartnerPage() {
               Delivered
             </div>
           </div>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3.5 text-center shadow-2xs">
+            <div className="text-xl font-extrabold text-rose-900">{failedCount}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700 mt-0.5">
+              Exceptions
+            </div>
+          </div>
         </div>
 
         {/* Filter Pills */}
-        <div className="flex gap-2 mb-4 text-xs font-bold">
+        <div className="flex flex-wrap gap-2 mb-4 text-xs font-bold">
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
@@ -231,6 +298,19 @@ export default function DeliveryPartnerPage() {
           >
             Delivered ({deliveredCount})
           </button>
+          {failedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter("failed")}
+              className={`rounded-xl px-3.5 py-1.5 transition-all ${
+                statusFilter === "failed"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-white border border-rose-200 text-rose-700 hover:bg-rose-50"
+              }`}
+            >
+              Failed / Issues ({failedCount})
+            </button>
+          )}
         </div>
 
         {/* Orders Listing */}
@@ -249,7 +329,8 @@ export default function DeliveryPartnerPage() {
               const isPaid = order.payment_status === "paid";
               const isDelivered = order.status === "delivered";
               const isOut = order.status === "out_for_delivery";
-              const isAssigned = !isOut && !isDelivered;
+              const isFailed = order.status === "delivery_failed";
+              const isAssigned = !isOut && !isDelivered && !isFailed;
 
               const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                 `${order.shipping_address}, ${order.shipping_city} ${order.shipping_pincode}`
@@ -261,6 +342,8 @@ export default function DeliveryPartnerPage() {
                   className={`rounded-3xl border p-5 shadow-xs transition-all bg-white ${
                     isOut
                       ? "border-indigo-300 ring-2 ring-indigo-500/10"
+                      : isFailed
+                      ? "border-rose-200 bg-rose-50/20"
                       : isDelivered
                       ? "border-gray-200 opacity-80"
                       : "border-gray-200"
@@ -277,12 +360,14 @@ export default function DeliveryPartnerPage() {
                           className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                             isDelivered
                               ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              : isFailed
+                              ? "bg-rose-50 text-rose-800 border-rose-200"
                               : isOut
                               ? "bg-indigo-50 text-indigo-800 border-indigo-200"
                               : "bg-amber-50 text-amber-800 border-amber-200"
                           }`}
                         >
-                          {order.status}
+                          {order.status === "delivery_failed" ? "Delivery Attempt Failed" : order.status}
                         </span>
                       </div>
                       <p className="text-[11px] text-gray-400 mt-0.5">
@@ -314,6 +399,22 @@ export default function DeliveryPartnerPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Delivery Failure Alert Box */}
+                  {isFailed && (
+                    <div className="my-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertTriangle size={14} className="text-rose-600" />
+                        <span>Delivery Issue Reported</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-rose-700">
+                        Reason: <strong className="font-semibold">{order.delivery_failure_reason || "Customer unavailable"}</strong>
+                      </p>
+                      <p className="text-[10px] text-rose-500 mt-0.5">
+                        Awaiting store administrator review. Do not return stock to shelf.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Customer Contact & Navigation */}
                   <div className="my-4 space-y-2.5 text-xs">
@@ -383,19 +484,35 @@ export default function DeliveryPartnerPage() {
                     )}
 
                     {isOut && (
-                      <button
-                        type="button"
-                        disabled={updatingId === order.id}
-                        onClick={() => updateStage(order.id, "delivered")}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all disabled:opacity-50"
-                      >
-                        <CheckCircle size={16} />
-                        <span>
-                          {isCOD && !isPaid
-                            ? `Confirm Cash Received (₹${parseFloat(order.total_amount).toFixed(0)}) & Mark Delivered`
-                            : "Confirm Package Delivered"}
-                        </span>
-                      </button>
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          disabled={updatingId === order.id}
+                          onClick={() => updateStage(order.id, "delivered")}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all disabled:opacity-50"
+                        >
+                          <CheckCircle size={16} />
+                          <span>
+                            {isCOD && !isPaid
+                              ? `Confirm Cash Received (₹${parseFloat(order.total_amount).toFixed(0)}) & Mark Delivered`
+                              : "Confirm Package Delivered"}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={updatingId === order.id}
+                          onClick={() => {
+                            setFailureModalOrder(order);
+                            setSelectedReason(FAILURE_REASONS[0]);
+                            setCustomReason("");
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-all"
+                        >
+                          <AlertTriangle size={14} />
+                          <span>Report Delivery Issue / Unable to Deliver</span>
+                        </button>
+                      </div>
                     )}
 
                     {isDelivered && (
@@ -411,6 +528,84 @@ export default function DeliveryPartnerPage() {
           </div>
         )}
       </main>
+
+      {/* Report Delivery Issue Modal */}
+      {failureModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-rose-600">
+                <AlertTriangle size={20} />
+                <h3 className="font-extrabold text-sm text-gray-900">Report Delivery Issue</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFailureModalOrder(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleReportFailure} className="mt-4 space-y-4">
+              <p className="text-xs text-gray-600">
+                Please state why <span className="font-bold text-gray-900">{failureModalOrder.order_number}</span> could not be delivered to <span className="font-bold text-gray-900">{failureModalOrder.customer_name}</span>. The store admin will be alerted.
+              </p>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                  Reason for Exception
+                </label>
+                <select
+                  value={selectedReason}
+                  onChange={(e) => setSelectedReason(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-gray-800 focus:border-rose-500 focus:outline-none"
+                >
+                  {FAILURE_REASONS.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedReason === "Other exception" && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    Describe Issue
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={customReason}
+                    onChange={(e) => setCustomReason(e.target.value)}
+                    placeholder="Provide details about why the delivery attempt failed..."
+                    className="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-gray-800 focus:border-rose-500 focus:outline-none"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFailureModalOrder(null)}
+                  className="flex-1 rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingFailure}
+                  className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50"
+                >
+                  {submittingFailure ? "Submitting..." : "Submit Exception"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

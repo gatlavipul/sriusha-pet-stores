@@ -51,3 +51,4 @@ export function getSafeReturnUrl(rawUrl, role = "customer") {
 
   return trimmed;
 }
+

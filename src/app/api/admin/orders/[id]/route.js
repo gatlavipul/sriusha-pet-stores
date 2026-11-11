@@ -1,20 +1,12 @@
 import sql from "@/app/api/utils/sql";
 import { requireAdmin, sanitizeText } from "@/app/api/utils/security";
+import {
+  ORDER_STATUS,
+  ALL_ORDER_STATUSES,
+  validateTransition,
+} from "@/utils/orderWorkflow";
 
-const VALID_STATUSES = [
-  "placed",
-  "confirmed",
-  "packing",
-  "packed",
-  "ready_for_delivery",
-  "assigned",
-  "out_for_delivery",
-  "delivered",
-  "cancelled",
-  "returned",
-  "pending",
-  "processing",
-];
+const VALID_STATUSES = ALL_ORDER_STATUSES;
 
 const VALID_PAYMENT_STATUSES = [
   "pending",
@@ -66,12 +58,20 @@ export async function GET(request, { params }) {
       ORDER BY name ASC
     `;
 
+    // Fetch related admin notifications for this order
+    const notifications = await sql`
+      SELECT * FROM admin_notifications
+      WHERE order_id = ${id}
+      ORDER BY created_at DESC
+    `;
+
     return Response.json({
       order: {
         ...order,
         order_number: order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`,
         items,
         history,
+        notifications,
       },
       deliveryPartners,
     });
@@ -133,8 +133,13 @@ export async function PUT(request, { params }) {
         paramIndex++;
 
         // If assigning partner and no explicit status requested, set status to 'assigned'
-        if (!targetStatus && (currentOrder.status === "ready_for_delivery" || currentOrder.status === "packed" || currentOrder.status === "confirmed")) {
-          targetStatus = "assigned";
+        if (!targetStatus && (
+          currentOrder.status === ORDER_STATUS.READY_FOR_DELIVERY ||
+          currentOrder.status === ORDER_STATUS.PACKING ||
+          currentOrder.status === ORDER_STATUS.CONFIRMED ||
+          currentOrder.status === ORDER_STATUS.DELIVERY_FAILED
+        )) {
+          targetStatus = ORDER_STATUS.ASSIGNED;
         }
       }
     }
@@ -148,12 +153,28 @@ export async function PUT(request, { params }) {
         );
       }
 
+      // Enforce role-based workflow transition rules
+      if (targetStatus !== currentOrder.status) {
+        const transitionError = validateTransition(currentOrder.status, targetStatus, "admin");
+        if (transitionError) {
+          return Response.json({ error: transitionError }, { status: 400 });
+        }
+      }
+
       updates.push(`status = $${paramIndex}`);
       values.push(targetStatus);
       paramIndex++;
 
-      // Inventory restoration when cancelling
-      if (targetStatus === "cancelled" && currentOrder.status !== "cancelled") {
+      // If recovering from delivery_failed, clear the failure reason
+      if (
+        currentOrder.status === ORDER_STATUS.DELIVERY_FAILED &&
+        (targetStatus === ORDER_STATUS.ASSIGNED || targetStatus === ORDER_STATUS.READY_FOR_DELIVERY)
+      ) {
+        updates.push(`delivery_failure_reason = NULL`);
+      }
+
+      // Inventory restoration when cancelling (strictly once!)
+      if (targetStatus === ORDER_STATUS.CANCELLED && currentOrder.status !== ORDER_STATUS.CANCELLED) {
         updates.push(`cancelled_at = NOW()`);
         if (cancellation_reason) {
           updates.push(`cancellation_reason = $${paramIndex}`);
@@ -161,19 +182,22 @@ export async function PUT(request, { params }) {
           paramIndex++;
         }
 
-        // Restore inventory stock for this order's items
-        const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
-        for (const item of items) {
-          if (item.product_id && item.quantity > 0) {
-            await sql`
-              UPDATE products 
-              SET stock_quantity = stock_quantity + ${item.quantity}, updated_at = NOW()
-              WHERE id = ${item.product_id}
-            `;
+        // Restore inventory stock only if not already restored
+        if (!currentOrder.stock_restored) {
+          const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
+          for (const item of items) {
+            if (item.product_id && item.quantity > 0) {
+              await sql`
+                UPDATE products 
+                SET stock_quantity = stock_quantity + ${item.quantity}, updated_at = NOW()
+                WHERE id = ${item.product_id}
+              `;
+            }
           }
+          updates.push(`stock_restored = TRUE`);
         }
-      } else if (currentOrder.status === "cancelled" && targetStatus !== "cancelled") {
-        // Un-cancelling: re-decrement stock
+      } else if (currentOrder.status === ORDER_STATUS.CANCELLED && targetStatus !== ORDER_STATUS.CANCELLED) {
+        // Un-cancelling: re-decrement stock and reset stock_restored flag
         const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
         for (const item of items) {
           if (item.product_id && item.quantity > 0) {
@@ -184,6 +208,7 @@ export async function PUT(request, { params }) {
             `;
           }
         }
+        updates.push(`stock_restored = FALSE`);
       }
     }
 
@@ -210,7 +235,7 @@ export async function PUT(request, { params }) {
     const query = `UPDATE orders SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`;
     const updated = await sql(query, values);
 
-    // Record timeline in order_status_history if status changed or partner assigned
+    // Record timeline in order_status_history if status changed
     if (targetStatus && targetStatus !== currentOrder.status) {
       const historyNotes = notes ? sanitizeText(notes, 255) : `Status updated to ${targetStatus} by administrator`;
       await sql`

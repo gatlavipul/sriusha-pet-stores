@@ -1,6 +1,7 @@
 import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
 import { validateEmail, validatePhone, sanitizeText } from "@/app/api/utils/security";
+import { ORDER_STATUS } from "@/utils/orderWorkflow";
 
 export async function GET() {
   try {
@@ -166,11 +167,11 @@ export async function POST(request) {
 
     const finalTotal = Math.max(1, Math.round(verifiedSubtotal + deliveryCharge - discount));
 
-    // For COD: payment_status is strictly 'pending', status is 'processing'
+    // For COD: payment_status is strictly 'pending', status is 'placed'
     // Server enforces payment security: client cannot pass 'paid' for COD orders
     const paymentMethod = payment_method === "cod" ? "cod" : "cod";
     const paymentStatus = "pending";
-    const orderStatus = "processing";
+    const orderStatus = ORDER_STATUS.PLACED;
 
     // 5. Create Order
     const newOrders = await sql`

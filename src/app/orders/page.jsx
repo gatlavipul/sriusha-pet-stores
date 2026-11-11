@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import { Package, Clock, ArrowRight, ArrowLeft, ChevronRight, ShoppingBag } from "lucide-react";
 import useUser from "@/utils/useUser";
+import { ORDER_STATUS_METADATA, getStatusBadgeClass } from "@/utils/orderWorkflow";
 
 export default function OrdersPage() {
   const { data: user, loading: userLoading } = useUser();
@@ -31,12 +32,7 @@ export default function OrdersPage() {
   };
 
   const getStatusColor = (status) => {
-    const s = (status || "").toLowerCase();
-    if (s === "delivered") return "border-emerald-300 bg-emerald-50 text-emerald-800";
-    if (s === "shipped") return "border-indigo-300 bg-indigo-50 text-indigo-800";
-    if (s === "confirmed" || s === "processing") return "border-blue-300 bg-blue-50 text-blue-800";
-    if (s === "cancelled") return "border-red-300 bg-red-50 text-red-800";
-    return "border-amber-300 bg-amber-50 text-amber-800";
+    return getStatusBadgeClass(status);
   };
 
   if (userLoading || loading) {
@@ -125,7 +121,7 @@ export default function OrdersPage() {
                           order.status
                         )}`}
                       >
-                        {order.status || "Processing"}
+                        {ORDER_STATUS_METADATA[order.status]?.customerLabel || order.status || "Placed"}
                       </span>
                       <span className="rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-[10px] font-semibold uppercase">
                         {order.payment_method || "COD"}

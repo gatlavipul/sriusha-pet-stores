@@ -167,12 +167,14 @@ export default function AdminOrdersPage() {
   const getStatusColor = (status) => {
     const s = (status || "").toLowerCase();
     if (s === "delivered") return "bg-emerald-50 text-emerald-800 border-emerald-200";
-    if (s === "out_for_delivery" || s === "shipped") return "bg-indigo-50 text-indigo-800 border-indigo-200";
+    if (s === "out_for_delivery") return "bg-indigo-50 text-indigo-800 border-indigo-200";
+    if (s === "delivery_failed") return "bg-rose-50 text-rose-800 border-rose-200";
     if (s === "assigned") return "bg-cyan-50 text-cyan-800 border-cyan-200";
-    if (s === "ready_for_delivery" || s === "packed") return "bg-purple-50 text-purple-800 border-purple-200";
-    if (s === "confirmed" || s === "processing") return "bg-blue-50 text-blue-800 border-blue-200";
+    if (s === "ready_for_delivery") return "bg-purple-50 text-purple-800 border-purple-200";
+    if (s === "packing") return "bg-amber-50 text-amber-800 border-amber-200";
+    if (s === "confirmed") return "bg-blue-50 text-blue-800 border-blue-200";
     if (s === "cancelled") return "bg-red-50 text-red-800 border-red-200";
-    return "bg-amber-50 text-amber-800 border-amber-200";
+    return "bg-gray-50 text-gray-800 border-gray-200";
   };
 
   if (userLoading) {
@@ -226,12 +228,13 @@ export default function AdminOrdersPage() {
               className="w-full rounded-xl border border-gray-300 py-2 px-3 text-xs outline-none focus:border-[#2563EB] bg-white font-medium"
             >
               <option value="all">All Stages</option>
-              <option value="placed">Placed / Pending</option>
+              <option value="placed">Placed</option>
               <option value="confirmed">Confirmed</option>
-              <option value="packing">Packing</option>
+              <option value="packing">Being Packed</option>
               <option value="ready_for_delivery">Ready for Delivery</option>
-              <option value="assigned">Assigned to Partner</option>
+              <option value="assigned">Assigned to Driver</option>
               <option value="out_for_delivery">Out for Delivery</option>
+              <option value="delivery_failed">Delivery Attempt Failed</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
             </select>
@@ -452,6 +455,49 @@ export default function AdminOrdersPage() {
                 </div>
               )}
 
+              {/* Delivery Exception Banner if Failed */}
+              {selectedOrder.status === "delivery_failed" && (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4">
+                  <div className="flex items-center gap-2 font-bold text-rose-900">
+                    <AlertTriangle size={18} className="text-rose-600" />
+                    <span className="text-sm">Delivery Exception Alert</span>
+                  </div>
+                  <p className="mt-2 text-xs text-rose-800 leading-relaxed">
+                    <strong>Reported Failure Reason:</strong>{" "}
+                    <span className="font-semibold">{selectedOrder.delivery_failure_reason || "Driver could not reach customer"}</span>
+                  </p>
+                  <p className="mt-1 text-[11px] text-rose-600">
+                    Stock is currently retained with the package. As administrator, you can re-dispatch with a driver, return the package to the staging counter, or cancel and restock the order.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={updatingStatus}
+                      onClick={() => updateOrderStatus(selectedOrder.id, "assigned")}
+                      className="rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 shadow-xs"
+                    >
+                      Re-assign &amp; Retry Delivery
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updatingStatus}
+                      onClick={() => updateOrderStatus(selectedOrder.id, "ready_for_delivery")}
+                      className="rounded-xl bg-purple-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-purple-700 shadow-xs"
+                    >
+                      Return to Ready for Delivery
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updatingStatus}
+                      onClick={() => updateOrderStatus(selectedOrder.id, "cancelled")}
+                      className="rounded-xl bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-red-700 shadow-xs"
+                    >
+                      Cancel Order &amp; Restock
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Status Workflow Selector */}
               <div className="rounded-2xl border border-gray-200 bg-blue-50/40 p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -500,7 +546,9 @@ export default function AdminOrdersPage() {
 
                 {selectedOrder.status === "cancelled" && (
                   <div className="mt-3 text-[11px] text-red-700 bg-red-50 p-2.5 rounded-xl border border-red-200">
-                    Inventory stock for these items has been automatically restored to store catalog.
+                    {selectedOrder.stock_restored
+                      ? "✓ Inventory stock for these items has been safely restored to the store catalog."
+                      : "Pending inventory return."}
                   </div>
                 )}
               </div>

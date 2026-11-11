@@ -1,5 +1,6 @@
 import sql from "@/app/api/utils/sql";
 import { requireDeliveryPartner, sanitizeText } from "@/app/api/utils/security";
+import { ORDER_STATUS, validateTransition } from "@/utils/orderWorkflow";
 
 export async function PUT(request, { params }) {
   try {
@@ -10,17 +11,25 @@ export async function PUT(request, { params }) {
 
     const partnerId = authResult.user.id;
     const { id } = params;
-    const body = await request.json();
-    const { status, notes } = body || {};
+    const body = await request.json().catch(() => ({}));
+    const { status, failure_reason, notes } = body;
 
-    if (!status || (status !== "out_for_delivery" && status !== "delivered")) {
+    const allowedPartnerStatuses = [
+      ORDER_STATUS.OUT_FOR_DELIVERY,
+      ORDER_STATUS.DELIVERED,
+      ORDER_STATUS.DELIVERY_FAILED,
+    ];
+
+    if (!status || !allowedPartnerStatuses.includes(status)) {
       return Response.json(
-        { error: "Delivery partners may only update status to 'out_for_delivery' or 'delivered'." },
+        {
+          error: `Delivery partners may only update status to: ${allowedPartnerStatuses.join(", ")}.`,
+        },
         { status: 400 }
       );
     }
 
-    // Verify order exists and is assigned to this delivery partner
+    // Verify order exists and is assigned specifically to this delivery partner
     const existingOrders = await sql`
       SELECT * FROM orders 
       WHERE id = ${id} AND assigned_delivery_partner_id = ${partnerId}
@@ -36,60 +45,136 @@ export async function PUT(request, { params }) {
 
     const currentOrder = existingOrders[0];
 
-    // Enforce valid lifecycle transitions
-    if (status === "out_for_delivery") {
-      const allowedPrevious = ["assigned", "ready_for_delivery", "packed", "processing", "confirmed"];
-      if (!allowedPrevious.includes(currentOrder.status)) {
+    // Enforce role-based state machine transition
+    const transitionError = validateTransition(currentOrder.status, status, "delivery_partner");
+    if (transitionError) {
+      return Response.json({ error: transitionError }, { status: 400 });
+    }
+
+    // Delivery failure handling
+    if (status === ORDER_STATUS.DELIVERY_FAILED) {
+      const cleanReason = sanitizeText(failure_reason || notes, 255);
+      if (!cleanReason || cleanReason.length < 3) {
         return Response.json(
-          { error: `Cannot transition order from '${currentOrder.status}' to 'out_for_delivery'.` },
+          {
+            error: "A valid delivery failure reason is required (e.g. 'Customer unavailable', 'Incorrect address', 'Delivery refused').",
+          },
           { status: 400 }
         );
       }
-    } else if (status === "delivered") {
-      if (currentOrder.status !== "out_for_delivery") {
-        return Response.json(
-          { error: "Order must be 'out_for_delivery' before it can be marked as 'delivered'." },
-          { status: 400 }
-        );
-      }
-    }
 
-    // Update order status (and mark COD payment paid if delivered)
-    const cleanNotes = notes ? sanitizeText(notes, 255) : null;
-    let paymentUpdateSql = "";
-    if (status === "delivered" && currentOrder.payment_method === "cod") {
+      // Update order to delivery_failed (COD payment remains unpaid 'pending', stock remains reserved)
       await sql`
         UPDATE orders 
-        SET status = ${status}, payment_status = 'paid', updated_at = NOW()
+        SET 
+          status = ${ORDER_STATUS.DELIVERY_FAILED},
+          delivery_failure_reason = ${cleanReason},
+          updated_at = NOW()
         WHERE id = ${id}
       `;
-    } else {
+
+      // Record in audit timeline
       await sql`
-        UPDATE orders 
-        SET status = ${status}, updated_at = NOW()
-        WHERE id = ${id}
+        INSERT INTO order_status_history (
+          order_id, status, changed_by_user_id, changed_by_role, notes
+        ) VALUES (
+          ${id},
+          ${ORDER_STATUS.DELIVERY_FAILED},
+          ${partnerId},
+          'delivery_partner',
+          ${`Delivery attempt failed: ${cleanReason}`}
+        )
       `;
+
+      // Notify administrator through admin_notifications
+      const orderRef = currentOrder.order_number || `Order #${currentOrder.id}`;
+      await sql`
+        INSERT INTO admin_notifications (
+          type, order_id, title, message
+        ) VALUES (
+          'delivery_failure',
+          ${id},
+          ${`Delivery Exception: ${orderRef}`},
+          ${`Driver ${authResult.user.name || 'Partner'} reported failed delivery. Reason: ${cleanReason}. Action required: reassign driver, reschedule, or cancel.`}
+        )
+      `;
+
+      const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      return Response.json({
+        success: true,
+        message: "Delivery exception reported. Administrator has been alerted for re-dispatch or review.",
+        order: updated[0],
+      });
     }
 
-    // Record audit timeline in order_status_history
-    const noteText = cleanNotes || (status === "out_for_delivery" ? "Driver started delivery" : "Package delivered to customer");
-    await sql`
-      INSERT INTO order_status_history (
-        order_id, status, changed_by_user_id, changed_by_role, notes
-      ) VALUES (
-        ${id}, ${status}, ${partnerId}, 'delivery_partner', ${noteText}
-      )
-    `;
+    // Success delivery handling: Mark COD as paid strictly on verified successful delivery
+    if (status === ORDER_STATUS.DELIVERED) {
+      const isCOD = currentOrder.payment_method === "cod";
+      const targetPaymentStatus = isCOD ? "paid" : currentOrder.payment_status;
 
-    const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      await sql`
+        UPDATE orders 
+        SET 
+          status = ${ORDER_STATUS.DELIVERED},
+          payment_status = ${targetPaymentStatus},
+          delivery_failure_reason = NULL,
+          updated_at = NOW()
+        WHERE id = ${id}
+      `;
 
-    return Response.json({
-      success: true,
-      message: `Order status updated to ${status}.`,
-      order: updated[0],
-    });
+      await sql`
+        INSERT INTO order_status_history (
+          order_id, status, changed_by_user_id, changed_by_role, notes
+        ) VALUES (
+          ${id},
+          ${ORDER_STATUS.DELIVERED},
+          ${partnerId},
+          'delivery_partner',
+          ${isCOD ? "Package delivered to customer. Cash on Delivery payment received and verified." : "Package successfully delivered to customer."}
+        )
+      `;
+
+      const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      return Response.json({
+        success: true,
+        message: "Order marked as delivered successfully.",
+        order: updated[0],
+      });
+    }
+
+    // Out for delivery handling
+    if (status === ORDER_STATUS.OUT_FOR_DELIVERY) {
+      await sql`
+        UPDATE orders 
+        SET 
+          status = ${ORDER_STATUS.OUT_FOR_DELIVERY},
+          updated_at = NOW()
+        WHERE id = ${id}
+      `;
+
+      await sql`
+        INSERT INTO order_status_history (
+          order_id, status, changed_by_user_id, changed_by_role, notes
+        ) VALUES (
+          ${id},
+          ${ORDER_STATUS.OUT_FOR_DELIVERY},
+          ${partnerId},
+          'delivery_partner',
+          ${notes ? sanitizeText(notes, 255) : "Driver started delivery navigation to customer address"}
+        )
+      `;
+
+      const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      return Response.json({
+        success: true,
+        message: "Order is now out for delivery.",
+        order: updated[0],
+      });
+    }
+
+    return Response.json({ error: "Unhandled status transition" }, { status: 400 });
   } catch (error) {
     console.error("Error updating delivery order:", error);
-    return Response.json({ error: "Failed to update delivery order" }, { status: 500 });
+    return Response.json({ error: "Failed to update delivery order: " + error.message }, { status: 500 });
   }
 }

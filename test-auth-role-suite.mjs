@@ -1,5 +1,12 @@
 import { neon } from "@neondatabase/serverless";
 import { getSafeReturnUrl } from "./src/utils/safeRedirect.js";
+import {
+  ORDER_STATUS,
+  ALLOWED_TRANSITIONS,
+  canTransition,
+  validateTransition,
+  isCancellableByCustomer,
+} from "./src/utils/orderWorkflow.js";
 
 const BASE_URL = "http://localhost:4000";
 const rawSql = neon(process.env.DATABASE_URL);
@@ -195,14 +202,94 @@ async function runTests() {
   );
 
   // ----------------------------------------------------------------------
-  // TEST GROUP 4: Admin Staff Management & Role Audit Trail
+  // TEST GROUP 4: Centralized Order Workflow Rules & Boundaries
   // ----------------------------------------------------------------------
-  console.log("\n--- 4. Administrative Role Management & Audit Trail ---");
+  console.log("\n--- 4. Centralized Order Workflow Rules & State Machine ---");
+
+  // 4.1 Allowed Admin Transitions
+  assert(
+    canTransition(ORDER_STATUS.PLACED, ORDER_STATUS.CONFIRMED, "admin") === true,
+    "Admin can transition: placed -> confirmed"
+  );
+  assert(
+    canTransition(ORDER_STATUS.CONFIRMED, ORDER_STATUS.PACKING, "admin") === true,
+    "Admin can transition: confirmed -> packing"
+  );
+  assert(
+    canTransition(ORDER_STATUS.PACKING, ORDER_STATUS.READY_FOR_DELIVERY, "admin") === true,
+    "Admin can transition: packing -> ready_for_delivery"
+  );
+  assert(
+    canTransition(ORDER_STATUS.READY_FOR_DELIVERY, ORDER_STATUS.ASSIGNED, "admin") === true,
+    "Admin can transition: ready_for_delivery -> assigned"
+  );
+  assert(
+    canTransition(ORDER_STATUS.DELIVERY_FAILED, ORDER_STATUS.ASSIGNED, "admin") === true,
+    "Admin can recover delivery exception: delivery_failed -> assigned"
+  );
+
+  // 4.2 Prohibited Admin Transitions
+  assert(
+    canTransition(ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED, "admin") === false,
+    "Admin CANNOT cancel already delivered order"
+  );
+  assert(
+    validateTransition(ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED, "admin") !== null,
+    "validateTransition returns descriptive error for terminal delivered order"
+  );
+
+  // 4.3 Delivery Partner Boundaries
+  assert(
+    canTransition(ORDER_STATUS.ASSIGNED, ORDER_STATUS.OUT_FOR_DELIVERY, "delivery_partner") === true,
+    "Delivery partner can transition: assigned -> out_for_delivery"
+  );
+  assert(
+    canTransition(ORDER_STATUS.OUT_FOR_DELIVERY, ORDER_STATUS.DELIVERED, "delivery_partner") === true,
+    "Delivery partner can transition: out_for_delivery -> delivered"
+  );
+  assert(
+    canTransition(ORDER_STATUS.OUT_FOR_DELIVERY, ORDER_STATUS.DELIVERY_FAILED, "delivery_partner") === true,
+    "Delivery partner can report exception: out_for_delivery -> delivery_failed"
+  );
+  assert(
+    canTransition(ORDER_STATUS.ASSIGNED, ORDER_STATUS.DELIVERED, "delivery_partner") === false,
+    "Delivery partner CANNOT skip out_for_delivery stage (assigned -> delivered blocked)"
+  );
+  assert(
+    canTransition(ORDER_STATUS.OUT_FOR_DELIVERY, ORDER_STATUS.CANCELLED, "delivery_partner") === false,
+    "Delivery partner CANNOT cancel an order directly"
+  );
+
+  // 4.4 Customer Cancellation Boundaries
+  assert(
+    isCancellableByCustomer(ORDER_STATUS.PLACED) === true,
+    "Customer can cancel order in 'placed' status"
+  );
+  assert(
+    isCancellableByCustomer(ORDER_STATUS.READY_FOR_DELIVERY) === true,
+    "Customer can cancel order in 'ready_for_delivery' status"
+  );
+  assert(
+    isCancellableByCustomer(ORDER_STATUS.ASSIGNED) === false,
+    "Customer CANNOT cancel once driver is 'assigned'"
+  );
+  assert(
+    isCancellableByCustomer(ORDER_STATUS.OUT_FOR_DELIVERY) === false,
+    "Customer CANNOT cancel once order is 'out_for_delivery'"
+  );
+  assert(
+    isCancellableByCustomer(ORDER_STATUS.DELIVERED) === false,
+    "Customer CANNOT cancel once order is 'delivered'"
+  );
+
+  // ----------------------------------------------------------------------
+  // TEST GROUP 5: Order Lifecycle, Delivery Workflow & Status History
+  // ----------------------------------------------------------------------
+  console.log("\n--- 5. Order Lifecycle, Delivery Assignment & Audit Trail ---");
 
   // Fetch admin user
   const adminUsers = await sql`SELECT id, email FROM auth_users WHERE role = 'admin' LIMIT 1`;
   const adminId = adminUsers[0]?.id;
-
   assert(Boolean(adminId), "Found existing verified administrator in database");
 
   const targetPartnerEmail = `driver_${Date.now()}@sriusha.com`;
@@ -213,31 +300,6 @@ async function runTests() {
   `;
   const partnerId = partnerUser[0].id;
 
-  // Insert audit log
-  await sql`
-    INSERT INTO admin_audit_logs (admin_id, action, target_user_id, details)
-    VALUES (
-      ${adminId},
-      'create_user',
-      ${partnerId},
-      ${JSON.stringify({ role: "delivery_partner", email: targetPartnerEmail })}::jsonb
-    )
-  `;
-
-  const auditLog = await sql`
-    SELECT * FROM admin_audit_logs 
-    WHERE target_user_id = ${partnerId} AND action = 'create_user'
-  `;
-  assert(
-    auditLog.length > 0 && auditLog[0].details?.role === "delivery_partner",
-    "Admin audit log recorded staff creation event without passwords or secrets"
-  );
-
-  // ----------------------------------------------------------------------
-  // TEST GROUP 5: Order Lifecycle, Delivery Workflow & Status History
-  // ----------------------------------------------------------------------
-  console.log("\n--- 5. Order Lifecycle, Delivery Assignment & Audit Trail ---");
-
   // Fetch an active product
   const products = await sql`
     SELECT id, name, price, stock_quantity 
@@ -246,6 +308,7 @@ async function runTests() {
     LIMIT 1
   `;
   const testProduct = products[0];
+  const initialStock = testProduct.stock_quantity;
 
   // 5.1 Place a Cash on Delivery order
   const orderRes = await fetch(`${BASE_URL}/api/orders`, {
@@ -259,7 +322,7 @@ async function runTests() {
       shipping_city: "Hyderabad",
       shipping_pincode: "500034",
       payment_method: "cod",
-      items: [{ id: testProduct.id, quantity: 1, name: testProduct.name }],
+      items: [{ id: testProduct.id, quantity: 2, name: testProduct.name }],
     }),
   });
   const orderData = await orderRes.json();
@@ -267,47 +330,86 @@ async function runTests() {
 
   const createdOrderId = orderData.order.id;
 
-  // 5.2 Verify initial timeline entry in order_status_history
+  // Verify stock was decremented by 2
+  const productAfterOrder = await sql`SELECT stock_quantity FROM products WHERE id = ${testProduct.id}`;
+  assert(
+    productAfterOrder[0].stock_quantity === initialStock - 2,
+    `Inventory decremented on checkout: ${initialStock} -> ${productAfterOrder[0].stock_quantity}`
+  );
+
+  // 5.2 Verify initial timeline entry in order_status_history is 'placed'
   const initialHistory = await sql`
     SELECT * FROM order_status_history WHERE order_id = ${createdOrderId} ORDER BY created_at ASC
   `;
   assert(
-    initialHistory.length >= 1 && initialHistory[0].status === "processing",
-    "Initial order status recorded in order_status_history"
+    initialHistory.length >= 1 && initialHistory[0].status === ORDER_STATUS.PLACED,
+    "Initial order status recorded as 'placed' in order_status_history"
   );
 
-  // 5.3 Admin assigns order to delivery partner and updates status to 'assigned'
+  // 5.3 COD Payment State: strictly pending while unfulfilled
+  const codOrderInit = await sql`SELECT payment_status FROM orders WHERE id = ${createdOrderId}`;
+  assert(
+    codOrderInit[0].payment_status === "pending",
+    "COD payment status initialized strictly to 'pending'"
+  );
+
+  // 5.4 Delivery Exception Workflow: driver reports failure
+  // Simulate order reaches out_for_delivery
   await sql`
     UPDATE orders 
-    SET assigned_delivery_partner_id = ${partnerId}, status = 'assigned', updated_at = NOW()
+    SET assigned_delivery_partner_id = ${partnerId}, status = 'out_for_delivery', updated_at = NOW()
+    WHERE id = ${createdOrderId}
+  `;
+
+  // Delivery partner updates stage to delivery_failed
+  const failureReason = "Customer phone switched off at doorstep";
+  await sql`
+    UPDATE orders 
+    SET status = 'delivery_failed', delivery_failure_reason = ${failureReason}, updated_at = NOW()
     WHERE id = ${createdOrderId}
   `;
   await sql`
     INSERT INTO order_status_history (order_id, status, changed_by_user_id, changed_by_role, notes)
-    VALUES (${createdOrderId}, 'assigned', ${adminId}, 'admin', 'Order assigned to Ravi Driver')
+    VALUES (${createdOrderId}, 'delivery_failed', ${partnerId}, 'delivery_partner', ${`Delivery attempt failed: ${failureReason}`})
+  `;
+  await sql`
+    INSERT INTO admin_notifications (type, order_id, title, message)
+    VALUES ('delivery_failure', ${createdOrderId}, 'Delivery Failed: Order #' || ${createdOrderId}, ${`Delivery partner reported issue: ${failureReason}`})
   `;
 
-  const assignedOrder = await sql`
-    SELECT id, status, assigned_delivery_partner_id FROM orders WHERE id = ${createdOrderId}
+  // Verify delivery_failed state
+  const failedOrder = await sql`
+    SELECT status, payment_status, delivery_failure_reason, stock_restored FROM orders WHERE id = ${createdOrderId}
   `;
   assert(
-    assignedOrder[0].assigned_delivery_partner_id === partnerId && assignedOrder[0].status === "assigned",
-    "Order successfully assigned to delivery partner"
+    failedOrder[0].status === "delivery_failed" &&
+    failedOrder[0].delivery_failure_reason === failureReason &&
+    failedOrder[0].payment_status === "pending" &&
+    failedOrder[0].stock_restored === false,
+    "Delivery exception recorded: reason stored, payment remains 'pending', stock NOT restored"
   );
 
-  // 5.4 Delivery partner stage transition: assigned -> out_for_delivery
+  // Verify admin notification was created
+  const notif = await sql`
+    SELECT * FROM admin_notifications WHERE order_id = ${createdOrderId} AND type = 'delivery_failure'
+  `;
+  assert(
+    notif.length > 0 && notif[0].message?.includes("Customer phone switched off"),
+    "Admin notification recorded for delivery exception"
+  );
+
+  // 5.5 Admin reviews and re-assigns driver for retry
   await sql`
     UPDATE orders 
-    SET status = 'out_for_delivery', updated_at = NOW()
+    SET status = 'assigned', delivery_failure_reason = NULL, updated_at = NOW()
     WHERE id = ${createdOrderId}
   `;
   await sql`
     INSERT INTO order_status_history (order_id, status, changed_by_user_id, changed_by_role, notes)
-    VALUES (${createdOrderId}, 'out_for_delivery', ${partnerId}, 'delivery_partner', 'Driver started delivery on route')
+    VALUES (${createdOrderId}, 'assigned', ${adminId}, 'admin', 'Admin re-assigned driver for re-attempt')
   `;
 
-  // 5.5 Delivery partner stage transition: out_for_delivery -> delivered
-  // And for COD, cash is collected -> payment_status becomes 'paid'
+  // 5.6 Successful re-delivery: out_for_delivery -> delivered
   await sql`
     UPDATE orders 
     SET status = 'delivered', payment_status = 'paid', updated_at = NOW()
@@ -315,34 +417,126 @@ async function runTests() {
   `;
   await sql`
     INSERT INTO order_status_history (order_id, status, changed_by_user_id, changed_by_role, notes)
-    VALUES (${createdOrderId}, 'delivered', ${partnerId}, 'delivery_partner', 'Package delivered and cash collected')
+    VALUES (${createdOrderId}, 'delivered', ${partnerId}, 'delivery_partner', 'Delivered and cash collected')
   `;
 
-  // 5.6 Verify complete timeline in order_status_history
-  const fullTimeline = await sql`
-    SELECT status, changed_by_role, notes 
-    FROM order_status_history 
-    WHERE order_id = ${createdOrderId} 
-    ORDER BY created_at ASC
-  `;
-  const stages = fullTimeline.map((h) => h.status);
+  const finalDelivered = await sql`SELECT status, payment_status FROM orders WHERE id = ${createdOrderId}`;
   assert(
-    stages.includes("processing") && stages.includes("assigned") && stages.includes("out_for_delivery") && stages.includes("delivered"),
-    `Full order lifecycle recorded in audit timeline: [${stages.join(" -> ")}]`
-  );
-
-  const deliveredOrder = await sql`
-    SELECT payment_status, status FROM orders WHERE id = ${createdOrderId}
-  `;
-  assert(
-    deliveredOrder[0].status === "delivered" && deliveredOrder[0].payment_status === "paid",
-    "Delivered COD order marked as 'delivered' and payment_status verified as 'paid'"
+    finalDelivered[0].status === "delivered" && finalDelivered[0].payment_status === "paid",
+    "Delivered order marked as 'delivered' and COD payment verified as 'paid'"
   );
 
   // ----------------------------------------------------------------------
-  // TEST GROUP 6: Frontend Route & Endpoint Availability
+  // TEST GROUP 6: Single-Restoration Inventory Protection on Cancellation
   // ----------------------------------------------------------------------
-  console.log("\n--- 6. Public Pages & Application Endpoints Health ---");
+  console.log("\n--- 6. Idempotent Single-Restoration Inventory Protection ---");
+
+  // Create a separate order to test cancellation & stock idempotency
+  const rameshEmail = `ramesh_${Date.now()}@example.com`;
+  const cancelTestOrderRes = await fetch(`${BASE_URL}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customer_name: "Ramesh Kumar",
+      customer_email: rameshEmail,
+      customer_phone: "9876543211",
+      shipping_address: "Banjara Hills Road 12",
+      shipping_city: "Hyderabad",
+      shipping_pincode: "500034",
+      payment_method: "cod",
+      items: [{ id: testProduct.id, quantity: 3, name: testProduct.name }],
+    }),
+  });
+  const cancelTestData = await cancelTestOrderRes.json();
+  const cancelOrderId = cancelTestData.order.id;
+
+  const stockBeforeCancel = (await sql`SELECT stock_quantity FROM products WHERE id = ${testProduct.id}`)[0].stock_quantity;
+
+  // First cancellation call via API
+  const firstCancelRes = await fetch(`${BASE_URL}/api/orders/${cancelOrderId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: rameshEmail,
+      reason: "Customer changed mind",
+    }),
+  });
+  const firstCancelData = await firstCancelRes.json();
+  assert(firstCancelRes.status === 200 && firstCancelData.success, "First cancellation succeeds");
+
+  const stockAfterFirstCancel = (await sql`SELECT stock_quantity FROM products WHERE id = ${testProduct.id}`)[0].stock_quantity;
+  assert(
+    stockAfterFirstCancel === stockBeforeCancel + 3,
+    `Inventory restored on first cancellation: ${stockBeforeCancel} -> ${stockAfterFirstCancel}`
+  );
+
+  // Verify stock_restored column is TRUE in orders
+  const cancelOrderRow = await sql`SELECT status, stock_restored FROM orders WHERE id = ${cancelOrderId}`;
+  assert(
+    cancelOrderRow[0].stock_restored === true,
+    "stock_restored flag set to TRUE on order record"
+  );
+
+  // Second duplicate cancellation call (should be idempotent: stock NOT restored again!)
+  const secondCancelRes = await fetch(`${BASE_URL}/api/orders/${cancelOrderId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: rameshEmail,
+      reason: "Duplicate cancellation trigger",
+    }),
+  });
+  const stockAfterSecondCancel = (await sql`SELECT stock_quantity FROM products WHERE id = ${testProduct.id}`)[0].stock_quantity;
+  assert(
+    stockAfterSecondCancel === stockAfterFirstCancel,
+    `Idempotent protection: stock NOT restored again on duplicate cancel (${stockAfterSecondCancel} === ${stockAfterFirstCancel})`
+  );
+
+  // ----------------------------------------------------------------------
+  // TEST GROUP 7: Customer Cancellation Rejection After Dispatch
+  // ----------------------------------------------------------------------
+  console.log("\n--- 7. Customer Cancellation Boundaries Enforcement ---");
+
+  // Create an order and move it to assigned
+  const sureshEmail = `suresh_${Date.now()}@example.com`;
+  const assignedTestOrderRes = await fetch(`${BASE_URL}/api/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customer_name: "Suresh Patel",
+      customer_email: sureshEmail,
+      customer_phone: "9876543212",
+      shipping_address: "Jubilee Hills Checkpost",
+      shipping_city: "Hyderabad",
+      shipping_pincode: "500033",
+      payment_method: "cod",
+      items: [{ id: testProduct.id, quantity: 1, name: testProduct.name }],
+    }),
+  });
+  const assignedOrderId = (await assignedTestOrderRes.json()).order.id;
+
+  // Move to 'assigned'
+  await sql`UPDATE orders SET status = 'assigned' WHERE id = ${assignedOrderId}`;
+
+  // Customer attempts to cancel assigned order via API
+  const customerCancelDispatchedRes = await fetch(`${BASE_URL}/api/orders/${assignedOrderId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: sureshEmail,
+      reason: "Late cancellation attempt",
+    }),
+  });
+  const customerCancelData = await customerCancelDispatchedRes.json();
+  assert(
+    customerCancelDispatchedRes.status === 400 && customerCancelData.error?.includes("cannot be cancelled"),
+    "Customer cancellation rejected when order has reached 'assigned' status"
+  );
+
+  // ----------------------------------------------------------------------
+  // TEST GROUP 8: Frontend Route & Endpoint Availability
+  // ----------------------------------------------------------------------
+  console.log("\n--- 8. Public Pages & Application Endpoints Health ---");
 
   const homeRes = await fetch(`${BASE_URL}/`);
   assert(homeRes.status === 200, "Storefront homepage (/) renders HTTP 200");

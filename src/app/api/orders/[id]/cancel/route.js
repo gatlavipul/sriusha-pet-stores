@@ -1,6 +1,7 @@
 import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
 import { sanitizeText } from "@/app/api/utils/security";
+import { isCancellableByCustomer, ORDER_STATUS } from "@/utils/orderWorkflow";
 
 export async function POST(request, { params }) {
   try {
@@ -16,13 +17,13 @@ export async function POST(request, { params }) {
     }
     const order = orders[0];
 
-    // Authorization: User must own the order or be admin or verify by email
+    // Authorization: User must own the order or be admin or verify by customer_email match
     const isOwner = session?.user?.id && order.user_id === session.user.id;
     const isEmailMatched = email && order.customer_email.toLowerCase() === email.toLowerCase().trim();
 
     let isAdmin = false;
     if (session?.user?.id) {
-      const u = await sql`SELECT role FROM auth_users WHERE id = ${session.user.id}`;
+      const u = await sql`SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1`;
       isAdmin = u[0]?.role === "admin";
     }
 
@@ -30,38 +31,52 @@ export async function POST(request, { params }) {
       return Response.json({ error: "Unauthorized to cancel this order" }, { status: 403 });
     }
 
-    // Check if order is eligible for cancellation
-    const cancellableStatuses = ["pending", "processing", "confirmed"];
-    if (!cancellableStatuses.includes(order.status)) {
+    // Role-based cancellation check
+    // Customers cannot cancel once the order has reached delivery transit
+    if (!isAdmin && !isCancellableByCustomer(order.status)) {
       return Response.json(
         {
-          error: `Order cannot be cancelled in its current stage ('${order.status}'). Items have already been packed or shipped. Please call customer support at +91 98765 43210 for assistance.`,
+          error: `Order cannot be cancelled in its current stage ('${order.status}'). Items have already been dispatched or delivered. Please contact customer care at +91 98765 43210 for support.`,
         },
         { status: 400 }
       );
     }
 
-    // 1. Restore product inventory stock
-    const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
-    for (const item of items) {
-      if (item.product_id && item.quantity > 0) {
-        await sql`
-          UPDATE products 
-          SET stock_quantity = stock_quantity + ${item.quantity}, updated_at = NOW()
-          WHERE id = ${item.product_id}
-        `;
+    // Admins cannot cancel an already delivered order through this endpoint
+    if (order.status === ORDER_STATUS.DELIVERED) {
+      return Response.json(
+        { error: "Delivered orders cannot be cancelled. A return request must be initiated." },
+        { status: 400 }
+      );
+    }
+
+    // 1. Restore product inventory stock ONLY if not already restored (Idempotency Protection)
+    if (!order.stock_restored) {
+      const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
+      for (const item of items) {
+        if (item.product_id && item.quantity > 0) {
+          await sql`
+            UPDATE products 
+            SET stock_quantity = stock_quantity + ${item.quantity}, updated_at = NOW()
+            WHERE id = ${item.product_id}
+          `;
+        }
       }
     }
 
-    // 2. Determine refund state if paid
+    // 2. Determine refund state if paid online
     const newPaymentStatus = order.payment_status === "paid" ? "refunded" : order.payment_status;
-    const cancelReason = sanitizeText(reason || "Customer requested cancellation before dispatch", 255);
+    const cancelReason = sanitizeText(
+      reason || (isAdmin ? "Cancelled by store administrator" : "Customer requested cancellation before dispatch"),
+      255
+    );
 
-    // 3. Update order
+    // 3. Update order record with stock_restored flag
     const updated = await sql`
       UPDATE orders 
       SET 
-        status = 'cancelled',
+        status = ${ORDER_STATUS.CANCELLED},
+        stock_restored = TRUE,
         payment_status = ${newPaymentStatus},
         cancellation_reason = ${cancelReason},
         cancelled_at = NOW(),
@@ -70,9 +85,22 @@ export async function POST(request, { params }) {
       RETURNING *
     `;
 
+    // 4. Record audit timeline entry
+    await sql`
+      INSERT INTO order_status_history (
+        order_id, status, changed_by_user_id, changed_by_role, notes
+      ) VALUES (
+        ${id}, 
+        ${ORDER_STATUS.CANCELLED}, 
+        ${session?.user?.id || null}, 
+        ${isAdmin ? "admin" : "customer"}, 
+        ${cancelReason}
+      )
+    `;
+
     return Response.json({
       success: true,
-      message: "Order has been successfully cancelled and items returned to store stock.",
+      message: "Order has been successfully cancelled and stock restored to inventory.",
       order: updated[0],
     });
   } catch (error) {
@@ -80,4 +108,3 @@ export async function POST(request, { params }) {
     return Response.json({ error: "Failed to cancel order: " + error.message }, { status: 500 });
   }
 }
-
