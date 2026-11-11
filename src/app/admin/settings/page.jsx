@@ -2,8 +2,10 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { Save, Truck, Settings as SettingsIcon } from "lucide-react";
+import useUser from "@/utils/useUser";
 
 export default function AdminSettingsPage() {
+  const { data: user, loading: userLoading } = useUser();
   const [settings, setSettings] = useState({
     delivery_charge_per_km: "0",
   });
@@ -12,8 +14,29 @@ export default function AdminSettingsPage() {
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    if (!userLoading && user) {
+      checkAdminAccess();
+    } else if (!userLoading && !user) {
+      if (typeof window !== "undefined") {
+        window.location.href = "/account/signin?callbackUrl=/admin/settings";
+      }
+    }
+  }, [user, userLoading]);
+
+  const checkAdminAccess = async () => {
+    try {
+      const response = await fetch("/api/admin/check-role");
+      const data = await response.json();
+      if (!data.isAdmin) {
+        if (typeof window !== "undefined") window.location.href = "/";
+        return;
+      }
+      fetchSettings();
+    } catch (error) {
+      console.error("Error checking admin access:", error);
+      if (typeof window !== "undefined") window.location.href = "/";
+    }
+  };
 
   const fetchSettings = async () => {
     try {

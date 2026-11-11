@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import useCart from "@/utils/useCart";
+import { useWishlist } from "@/utils/useWishlist";
 import {
   ArrowRight,
   ShieldCheck,
@@ -14,10 +15,12 @@ import {
   Clock,
   Sparkles,
   ShoppingBag,
+  Heart,
 } from "lucide-react";
 
 export default function HomePage() {
   const { addToCart } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
   const [addedIds, setAddedIds] = useState({});
 
   const { data: categoriesData, isLoading: isLoadingCategories } = useQuery({
@@ -304,22 +307,43 @@ export default function HomePage() {
                       )
                     : null;
 
+                  const isWishlisted = isInWishlist(product.id);
+
                   return (
                     <div
                       key={product.id}
-                      className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-4 shadow-xs hover:border-[#2563EB] hover:shadow-lg transition-all duration-200"
+                      className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-4 shadow-xs hover:border-[#2563EB] hover:shadow-lg transition-all duration-200 relative"
                     >
                       <div>
                         {/* Image Container with Badges */}
-                        <a
-                          href={`/products/${product.slug}`}
-                          className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3.5"
-                        >
-                          <img
-                            src={product.image_url}
-                            alt={product.name}
-                            className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-                          />
+                        <div className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3.5">
+                          <a href={`/products/${product.slug}`} className="block h-full w-full">
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                            />
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleWishlist(product);
+                            }}
+                            title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                            className={`absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full shadow-xs transition-colors ${
+                              isWishlisted
+                                ? "bg-rose-50 text-rose-600 border border-rose-200"
+                                : "bg-white/90 text-gray-400 hover:text-rose-500 border border-gray-200"
+                            }`}
+                          >
+                            <Heart size={14} className={isWishlisted ? "fill-rose-500" : ""} />
+                          </button>
+
                           {discountPercent && discountPercent > 0 && (
                             <span className="absolute top-2.5 left-2.5 rounded-md bg-[#DC2626] px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
                               {discountPercent}% OFF
@@ -328,7 +352,7 @@ export default function HomePage() {
                           <span className="absolute bottom-2.5 right-2.5 rounded-md bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
                             In Stock
                           </span>
-                        </a>
+                        </div>
 
                         {/* Brand and category */}
                         <div className="flex items-center gap-2 mb-1.5">

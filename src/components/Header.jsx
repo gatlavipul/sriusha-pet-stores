@@ -12,13 +12,16 @@ import {
   LayoutDashboard,
   LogOut,
   Package,
+  Heart,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 import useCart from "@/utils/useCart";
+import { useWishlist } from "@/utils/useWishlist";
 
 export default function Header() {
   const { data: user } = useUser();
   const { totalCount } = useCart();
+  const { count: wishlistCount } = useWishlist();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -144,6 +147,21 @@ export default function Header() {
                 </a>
               )}
 
+              {/* Wishlist Link */}
+              <a
+                href="/wishlist"
+                className="relative inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-rose-600 transition-colors"
+                title="My Wishlist"
+              >
+                <Heart size={18} className={wishlistCount > 0 ? "text-rose-500 fill-rose-500" : "text-gray-600"} />
+                <span className="hidden sm:inline">Wishlist</span>
+                {wishlistCount > 0 && (
+                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-xs">
+                    {wishlistCount}
+                  </span>
+                )}
+              </a>
+
               <a
                 href="/orders"
                 className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-[#2563EB] transition-colors"
@@ -206,6 +224,14 @@ export default function Header() {
                           <span>Admin Dashboard</span>
                         </a>
                       )}
+
+                      <a
+                        href="/wishlist"
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <Heart size={14} className="text-rose-500" />
+                        <span>My Wishlist ({wishlistCount})</span>
+                      </a>
 
                       <a
                         href="/orders"
@@ -310,6 +336,20 @@ export default function Header() {
                   <span>Admin Panel</span>
                 </a>
               )}
+              <a
+                href="/wishlist"
+                className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+              >
+                <div className="flex items-center gap-2">
+                  <Heart size={14} className="text-rose-500" />
+                  <span>My Wishlist</span>
+                </div>
+                {wishlistCount > 0 && (
+                  <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                    {wishlistCount}
+                  </span>
+                )}
+              </a>
               <a
                 href="/orders"
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100"

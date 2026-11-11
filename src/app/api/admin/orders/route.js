@@ -1,20 +1,60 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/app/api/utils/security";
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
-    const orders = await sql`
-      SELECT * FROM orders 
-      ORDER BY created_at DESC
-    `;
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search");
+    const status = searchParams.get("status");
+    const paymentStatus = searchParams.get("payment_status");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const offset = (page - 1) * limit;
 
-    // Fetch items for all orders
-    const orderIds = orders.map(o => o.id);
+    let query = `SELECT * FROM orders WHERE 1=1`;
+    const params = [];
+    let paramIndex = 1;
+
+    if (search) {
+      query += ` AND (
+        LOWER(COALESCE(order_number, '')) LIKE LOWER($${paramIndex}) OR
+        LOWER(COALESCE(customer_name, '')) LIKE LOWER($${paramIndex}) OR
+        LOWER(COALESCE(customer_email, '')) LIKE LOWER($${paramIndex}) OR
+        COALESCE(customer_phone, '') LIKE $${paramIndex}
+      )`;
+      params.push(`%${search.trim()}%`);
+      paramIndex++;
+    }
+
+    if (status && status !== "all") {
+      query += ` AND status = $${paramIndex}`;
+      params.push(status);
+      paramIndex++;
+    }
+
+    if (paymentStatus && paymentStatus !== "all") {
+      query += ` AND payment_status = $${paramIndex}`;
+      params.push(paymentStatus);
+      paramIndex++;
+    }
+
+    // Total count for pagination
+    const countQuery = `SELECT COUNT(*)::int as total FROM (${query}) AS filtered_tbl`;
+    const countRes = await sql(countQuery, params);
+    const totalCount = countRes[0]?.total || 0;
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
+
+    const orders = await sql(query, params);
+
+    // Fetch items for all returned orders
+    const orderIds = orders.map((o) => o.id);
     let allItems = [];
     if (orderIds.length > 0) {
       allItems = await sql`
@@ -24,14 +64,23 @@ export async function GET() {
     }
 
     // Attach items to each order
-    const ordersWithItems = orders.map(order => ({
+    const ordersWithItems = orders.map((order) => ({
       ...order,
-      items: allItems.filter(item => item.order_id === order.id)
+      order_number: order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`,
+      items: allItems.filter((item) => item.order_id === order.id),
     }));
 
-    return Response.json({ orders: ordersWithItems });
+    return Response.json({
+      orders: ordersWithItems,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    });
   } catch (error) {
-    console.error("Error fetching orders:", error);
+    console.error("Error fetching admin orders:", error);
     return Response.json({ error: "Failed to fetch orders" }, { status: 500 });
   }
 }

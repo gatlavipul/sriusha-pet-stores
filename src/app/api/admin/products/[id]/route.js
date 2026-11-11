@@ -1,11 +1,11 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/app/api/utils/security";
 
 export async function GET(request, { params }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const { id } = params;
@@ -36,9 +36,9 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const { id } = params;
@@ -72,33 +72,38 @@ export async function PUT(request, { params }) {
       }
     }
 
-    if (setClauses.length === 0) {
+    if (setClauses.length === 0 && body.images === undefined) {
       return Response.json({ error: "No fields to update" }, { status: 400 });
     }
 
-    setClauses.push(`updated_at = NOW()`);
-    values.push(id);
+    let product;
+    if (setClauses.length > 0) {
+      setClauses.push(`updated_at = NOW()`);
+      values.push(id);
 
-    const query = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${paramIndex} RETURNING *`;
-    const products = await sql(query, values);
-    const product = products[0];
+      const query = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${paramIndex} RETURNING *`;
+      const products = await sql(query, values);
+      product = products[0];
+    } else {
+      const existing = await sql`SELECT * FROM products WHERE id = ${id}`;
+      product = existing[0];
+    }
 
     // Handle image updates
-    if (body.images !== undefined) {
-      // Delete existing images
+    if (body.images !== undefined && Array.isArray(body.images)) {
       await sql`DELETE FROM product_images WHERE product_id = ${id}`;
 
-      // Insert new images
       for (let i = 0; i < body.images.length; i++) {
         const img = body.images[i];
-        await sql`
-          INSERT INTO product_images (product_id, image_url, is_default, sort_order)
-          VALUES (${id}, ${img.url}, ${i === 0 ? true : false}, ${i})
-        `;
+        if (img?.url) {
+          await sql`
+            INSERT INTO product_images (product_id, image_url, is_default, sort_order)
+            VALUES (${id}, ${img.url}, ${i === 0}, ${i})
+          `;
+        }
       }
 
-      // Update main image_url
-      if (body.images.length > 0) {
+      if (body.images.length > 0 && body.images[0]?.url) {
         await sql`UPDATE products SET image_url = ${body.images[0].url} WHERE id = ${id}`;
         product.image_url = body.images[0].url;
       }
@@ -116,16 +121,16 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const { id } = params;
-    // Product images will be cascade deleted
+    await sql`DELETE FROM product_images WHERE product_id = ${id}`;
     await sql`DELETE FROM products WHERE id = ${id}`;
 
-    return Response.json({ success: true });
+    return Response.json({ success: true, message: "Product deleted successfully" });
   } catch (error) {
     console.error("Error deleting product:", error);
     return Response.json(

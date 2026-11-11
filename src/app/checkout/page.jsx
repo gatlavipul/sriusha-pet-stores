@@ -18,6 +18,8 @@ export default function CheckoutPage() {
   const { items, subtotal, isFreeShipping, clearCart } = useCart();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState(null);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [saveAddressToBook, setSaveAddressToBook] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -30,7 +32,7 @@ export default function CheckoutPage() {
     notes: "",
   });
 
-  // Prefill with logged in user data if present
+  // Prefill with logged in user data and fetch saved addresses if present
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({
@@ -38,6 +40,26 @@ export default function CheckoutPage() {
         name: prev.name || user.name || "",
         email: prev.email || user.email || "",
       }));
+
+      fetch("/api/addresses")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.addresses && d.addresses.length > 0) {
+            setSavedAddresses(d.addresses);
+            const def = d.addresses.find((a) => a.is_default) || d.addresses[0];
+            if (def) {
+              setFormData((prev) => ({
+                ...prev,
+                name: def.name || prev.name,
+                phone: def.phone || prev.phone,
+                address: def.address_line || prev.address,
+                city: def.city || prev.city,
+                pincode: def.pincode || prev.pincode,
+              }));
+            }
+          }
+        })
+        .catch(() => {});
     }
   }, [user]);
 
@@ -117,7 +139,9 @@ export default function CheckoutPage() {
       const paymentRes = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: total }),
+        body: JSON.stringify({
+          items: orderDataPayload.items,
+        }),
       });
 
       if (!paymentRes.ok) {
@@ -126,6 +150,10 @@ export default function CheckoutPage() {
       }
 
       const { orderId, amount, currency, key } = await paymentRes.json();
+
+      if (!key) {
+        throw new Error("Online payment gateway key is not available. Please choose Cash on Delivery.");
+      }
 
       const options = {
         key: key,
@@ -137,24 +165,29 @@ export default function CheckoutPage() {
         order_id: orderId,
         handler: async function (response) {
           try {
-            const saveRes = await fetch("/api/orders", {
+            // Cryptographic server-side HMAC signature verification
+            const verifyRes = await fetch("/api/checkout/verify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
                 ...orderDataPayload,
-                payment_intent_id: response.razorpay_payment_id,
-                payment_status: "paid",
-                status: "confirmed",
               }),
             });
 
-            if (!saveRes.ok) throw new Error("Failed to save paid order");
-            const orderData = await saveRes.json();
+            if (!verifyRes.ok) {
+              const errData = await verifyRes.json();
+              throw new Error(errData.error || "Failed to verify payment on server");
+            }
+
+            const verifyData = await verifyRes.json();
             await clearCart();
-            window.location.href = `/orders/${orderData.order.id}?confirmed=true`;
+            window.location.href = `/orders/${verifyData.order.id}?confirmed=true`;
           } catch (err) {
-            console.error("Order save after payment error:", err);
-            setError("Payment succeeded! Please contact us at +91 98765 43210 with reference: " + response.razorpay_payment_id);
+            console.error("Order verification error:", err);
+            setError("Payment received, but verification encountered an issue: " + err.message + ". Please contact support with reference: " + response.razorpay_payment_id);
             setProcessing(false);
           }
         },
@@ -165,12 +198,19 @@ export default function CheckoutPage() {
         },
         theme: { color: "#2563EB" },
         modal: {
-          ondismiss: () => setProcessing(false),
+          ondismiss: () => {
+            setProcessing(false);
+            setError("Payment popup closed. You can retry or choose Cash on Delivery.");
+          },
         },
       };
 
       if (typeof window !== "undefined" && window.Razorpay) {
         const rzp = new window.Razorpay(options);
+        rzp.on("payment.failed", function (failResp) {
+          setError("Payment failed: " + (failResp.error?.description || "Transaction declined by bank."));
+          setProcessing(false);
+        });
         rzp.open();
       } else {
         throw new Error("Razorpay SDK not loaded. Please try Cash on Delivery or reload.");
@@ -310,6 +350,47 @@ export default function CheckoutPage() {
                     Delivery Address (Hyderabad)
                   </h2>
                 </div>
+
+                {/* Saved addresses selector */}
+                {savedAddresses.length > 0 && (
+                  <div className="mb-4 rounded-2xl bg-blue-50/50 border border-blue-200 p-3.5">
+                    <div className="text-xs font-bold text-blue-900 mb-2">
+                      Saved Addresses in Your Account:
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {savedAddresses.map((addr) => (
+                        <button
+                          key={addr.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              name: addr.name || prev.name,
+                              phone: addr.phone || prev.phone,
+                              address: addr.address_line,
+                              city: addr.city,
+                              pincode: addr.pincode,
+                            }));
+                          }}
+                          className={`rounded-xl border p-2.5 text-left text-xs transition-all ${
+                            formData.address === addr.address_line
+                              ? "border-[#2563EB] bg-white text-[#2563EB] shadow-xs"
+                              : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="font-bold flex items-center justify-between">
+                            <span>{addr.name}</span>
+                            {addr.is_default && (
+                              <span className="text-[10px] bg-blue-100 text-[#2563EB] px-1.5 py-0.5 rounded">Default</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-gray-500 line-clamp-1 mt-0.5">{addr.address_line}</div>
+                          <div className="text-[10px] text-gray-400">{addr.city} - {addr.pincode}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div>

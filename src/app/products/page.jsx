@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Header from "@/components/Header";
 import useCart from "@/utils/useCart";
+import { useWishlist } from "@/utils/useWishlist";
 import {
   Search,
   SlidersHorizontal,
@@ -9,10 +10,14 @@ import {
   ShoppingBag,
   X,
   Package,
+  Heart,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 
 export default function ProductsPage() {
   const { addToCart } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -298,31 +303,67 @@ export default function ProductsPage() {
                   )
                 : null;
 
+              const isWishlisted = isInWishlist(product.id);
+              const stock = product.stock_quantity !== undefined ? product.stock_quantity : 15;
+              const isOutOfStock = stock <= 0;
+              const isLowStock = stock > 0 && stock <= 5;
+
               return (
                 <div
                   key={product.id}
-                  className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-4 shadow-xs hover:border-[#2563EB] hover:shadow-lg transition-all duration-200"
+                  className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-4 shadow-xs hover:border-[#2563EB] hover:shadow-lg transition-all duration-200 relative"
                 >
                   <div>
                     {/* Image */}
-                    <a
-                      href={`/products/${product.slug}`}
-                      className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3.5"
-                    >
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-                      />
+                    <div className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3.5">
+                      <a href={`/products/${product.slug}`} className="block h-full w-full">
+                        <img
+                          src={product.image_url}
+                          alt={product.name}
+                          className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                        />
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleWishlist(product);
+                        }}
+                        title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                        className={`absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full shadow-xs transition-colors ${
+                          isWishlisted
+                            ? "bg-rose-50 text-rose-600 border border-rose-200"
+                            : "bg-white/90 text-gray-400 hover:text-rose-500 border border-gray-200"
+                        }`}
+                      >
+                        <Heart size={14} className={isWishlisted ? "fill-rose-500" : ""} />
+                      </button>
+
                       {discountPercent && discountPercent > 0 && (
-                        <span className="absolute top-2.5 left-2.5 rounded-md bg-[#DC2626] px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
+                        <span className="absolute top-2 left-2 rounded-md bg-[#DC2626] px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
                           {discountPercent}% OFF
                         </span>
                       )}
-                      <span className="absolute bottom-2.5 right-2.5 rounded-md bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                        In Stock
-                      </span>
-                    </a>
+
+                      {/* Stock indicator badge */}
+                      {isOutOfStock ? (
+                        <span className="absolute bottom-2 right-2 rounded-md bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] font-bold flex items-center gap-0.5">
+                          <AlertCircle size={10} />
+                          Out of Stock
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="absolute bottom-2 right-2 rounded-md bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 text-[10px] font-bold flex items-center gap-0.5">
+                          <Clock size={10} />
+                          Only {stock} left
+                        </span>
+                      ) : (
+                        <span className="absolute bottom-2 right-2 rounded-md bg-white/95 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                          In Stock
+                        </span>
+                      )}
+                    </div>
 
                     {/* Brand / Category */}
                     <div className="flex items-center gap-2 mb-1.5">
@@ -372,14 +413,19 @@ export default function ProductsPage() {
                     </div>
 
                     <button
-                      onClick={(e) => handleQuickAdd(product, e)}
+                      onClick={(e) => !isOutOfStock && handleQuickAdd(product, e)}
+                      disabled={isOutOfStock}
                       className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold shadow-xs transition-all ${
-                        isAdded
+                        isOutOfStock
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                          : isAdded
                           ? "bg-emerald-600 text-white"
                           : "bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
                       }`}
                     >
-                      {isAdded ? (
+                      {isOutOfStock ? (
+                        <span>Out of Stock</span>
+                      ) : isAdded ? (
                         <>
                           <Check size={14} />
                           <span>Added</span>

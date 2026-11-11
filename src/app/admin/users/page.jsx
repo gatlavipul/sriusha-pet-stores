@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { Plus, Trash2, Shield, User } from "lucide-react";
+import useUser from "@/utils/useUser";
 
 export default function AdminUsersPage() {
+  const { data: user, loading: userLoading } = useUser();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
@@ -14,8 +16,29 @@ export default function AdminUsersPage() {
   });
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (!userLoading && user) {
+      checkAdminAccess();
+    } else if (!userLoading && !user) {
+      if (typeof window !== "undefined") {
+        window.location.href = "/account/signin?callbackUrl=/admin/users";
+      }
+    }
+  }, [user, userLoading]);
+
+  const checkAdminAccess = async () => {
+    try {
+      const response = await fetch("/api/admin/check-role");
+      const data = await response.json();
+      if (!data.isAdmin) {
+        if (typeof window !== "undefined") window.location.href = "/";
+        return;
+      }
+      fetchUsers();
+    } catch (error) {
+      console.error("Error checking admin access:", error);
+      if (typeof window !== "undefined") window.location.href = "/";
+    }
+  };
 
   const fetchUsers = async () => {
     try {

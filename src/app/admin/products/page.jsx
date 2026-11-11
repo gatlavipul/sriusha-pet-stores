@@ -31,6 +31,14 @@ export default function AdminProductsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [lowStockFilter, setLowStockFilter] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("low_stock") === "true") setLowStockFilter(true);
+    }
+  }, []);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -98,6 +106,7 @@ export default function AdminProductsPage() {
       if (searchQuery) params.set("search", searchQuery);
       if (categoryFilter) params.set("category", categoryFilter);
       if (statusFilter) params.set("status", statusFilter);
+      if (lowStockFilter) params.set("low_stock", "true");
 
       const res = await fetch(`/api/admin/products?${params.toString()}`);
       const data = await res.json();
@@ -107,7 +116,23 @@ export default function AdminProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, categoryFilter, statusFilter]);
+  }, [searchQuery, categoryFilter, statusFilter, lowStockFilter]);
+
+  const handleUpdateStock = async (productId, newStock) => {
+    try {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, stock_quantity: newStock } : p))
+      );
+      await fetch(`/api/admin/products/${productId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stock_quantity: newStock }),
+      });
+    } catch (err) {
+      console.error(err);
+      fetchProducts();
+    }
+  };
 
   useEffect(() => {
     if (!userLoading && user) {
@@ -116,7 +141,7 @@ export default function AdminProductsPage() {
       }, searchQuery ? 300 : 0);
       return () => clearTimeout(timer);
     }
-  }, [searchQuery, categoryFilter, statusFilter, user, userLoading, fetchProducts]);
+  }, [searchQuery, categoryFilter, statusFilter, lowStockFilter, user, userLoading, fetchProducts]);
 
   const fetchCategories = async () => {
     try {
@@ -495,6 +520,18 @@ export default function AdminProductsPage() {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+          <button
+            type="button"
+            onClick={() => setLowStockFilter(!lowStockFilter)}
+            className={`rounded-lg px-4 py-2.5 text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              lowStockFilter
+                ? "bg-amber-600 text-white shadow-xs"
+                : "border border-gray-300 bg-white text-gray-700 hover:border-amber-400"
+            }`}
+          >
+            <AlertTriangle size={14} className={lowStockFilter ? "text-white" : "text-amber-500"} />
+            <span>Low Stock (≤5)</span>
+          </button>
         </div>
 
         {/* Bulk Actions Bar */}
@@ -650,16 +687,35 @@ export default function AdminProductsPage() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <span
-                          className={`text-sm font-medium ${product.stock_quantity > 10
-                              ? "text-[#27AE60]"
-                              : product.stock_quantity > 0
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStock(product.id, Math.max(0, (product.stock_quantity || 0) - 1))}
+                            className="h-6 w-6 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs font-bold transition-colors"
+                            title="Decrease stock"
+                          >
+                            −
+                          </button>
+                          <span
+                            className={`min-w-[28px] text-center text-sm font-bold ${
+                              product.stock_quantity > 10
+                                ? "text-[#27AE60]"
+                                : product.stock_quantity > 0
                                 ? "text-[#F39C12]"
                                 : "text-red-500"
                             }`}
-                        >
-                          {product.stock_quantity}
-                        </span>
+                          >
+                            {product.stock_quantity || 0}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStock(product.id, (product.stock_quantity || 0) + 1)}
+                            className="h-6 w-6 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs font-bold transition-colors"
+                            title="Increase stock"
+                          >
+                            +
+                          </button>
+                        </div>
                       </td>
                       <td className="p-4">
                         <button

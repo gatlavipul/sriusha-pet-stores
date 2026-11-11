@@ -1,38 +1,78 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/app/api/utils/security";
 
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
-    const totalProducts =
-      await sql`SELECT COUNT(*) as count FROM products WHERE is_active = true`;
-    const totalOrders = await sql`SELECT COUNT(*) as count FROM orders`;
-    const totalRevenue =
-      await sql`SELECT SUM(total_amount) as total FROM orders WHERE payment_status = 'completed'`;
-    const pendingOrders =
-      await sql`SELECT COUNT(*) as count FROM orders WHERE status = 'pending'`;
+    // 1. Total active products
+    const totalProducts = await sql`
+      SELECT COUNT(*)::int as count FROM products WHERE is_active = true
+    `;
 
+    // 2. Low stock products (5 or fewer in stock)
+    const lowStockProducts = await sql`
+      SELECT COUNT(*)::int as count FROM products WHERE is_active = true AND stock_quantity <= 5
+    `;
+
+    // 3. Total orders count
+    const totalOrders = await sql`
+      SELECT COUNT(*)::int as count FROM orders
+    `;
+
+    // 4. Pending orders count
+    const pendingOrders = await sql`
+      SELECT COUNT(*)::int as count FROM orders WHERE status IN ('pending', 'processing')
+    `;
+
+    // 5. Total customers count
+    const totalCustomers = await sql`
+      SELECT COUNT(*)::int as count FROM auth_users WHERE role = 'customer'
+    `;
+
+    // 6. Total revenue (sum of orders that are marked 'paid' OR delivered COD)
+    const revenueRes = await sql`
+      SELECT COALESCE(SUM(total_amount), 0) as total 
+      FROM orders 
+      WHERE payment_status = 'paid' OR (payment_method = 'cod' AND status = 'delivered')
+    `;
+
+    // 7. Recent orders with items count
     const recentOrders = await sql`
-      SELECT * FROM orders 
-      ORDER BY created_at DESC 
-      LIMIT 5
+      SELECT 
+        o.id,
+        COALESCE(o.order_number, 'SU-2026-' || LPAD(o.id::text, 4, '0')) as order_number,
+        o.customer_name,
+        o.customer_email,
+        o.total_amount,
+        o.payment_method,
+        o.payment_status,
+        o.status,
+        o.created_at,
+        COUNT(oi.id)::int as item_count
+      FROM orders o
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      GROUP BY o.id
+      ORDER BY o.created_at DESC
+      LIMIT 8
     `;
 
     return Response.json({
       stats: {
-        totalProducts: parseInt(totalProducts[0].count),
-        totalOrders: parseInt(totalOrders[0].count),
-        totalRevenue: parseFloat(totalRevenue[0].total || 0),
-        pendingOrders: parseInt(pendingOrders[0].count),
+        totalProducts: totalProducts[0]?.count || 0,
+        lowStockProducts: lowStockProducts[0]?.count || 0,
+        totalOrders: totalOrders[0]?.count || 0,
+        pendingOrders: pendingOrders[0]?.count || 0,
+        totalCustomers: totalCustomers[0]?.count || 0,
+        totalRevenue: parseFloat(revenueRes[0]?.total || 0),
       },
       recentOrders,
     });
   } catch (error) {
-    console.error("Error fetching stats:", error);
+    console.error("Error fetching admin stats:", error);
     return Response.json({ error: "Failed to fetch stats" }, { status: 500 });
   }
 }

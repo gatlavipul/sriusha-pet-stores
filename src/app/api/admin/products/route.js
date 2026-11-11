@@ -1,17 +1,21 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin, sanitizeText } from "@/app/api/utils/security";
 
 export async function GET(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
     const category = searchParams.get("category");
     const status = searchParams.get("status");
+    const lowStock = searchParams.get("low_stock") === "true";
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const offset = (page - 1) * limit;
 
     let query = `
       SELECT p.*, c.name as category_name, sc.name as sub_category_name,
@@ -26,13 +30,13 @@ export async function GET(request) {
 
     if (search) {
       query += ` AND (LOWER(p.name) LIKE LOWER($${paramIndex}) OR LOWER(p.brand) LIKE LOWER($${paramIndex}) OR LOWER(p.description) LIKE LOWER($${paramIndex}))`;
-      params.push(`%${search}%`);
+      params.push(`%${search.trim()}%`);
       paramIndex++;
     }
 
     if (category) {
       query += ` AND p.category_id = $${paramIndex}`;
-      params.push(category);
+      params.push(parseInt(category, 10));
       paramIndex++;
     }
 
@@ -42,19 +46,36 @@ export async function GET(request) {
       query += ` AND p.is_active = false`;
     }
 
-    query += ` ORDER BY p.created_at DESC`;
+    if (lowStock) {
+      query += ` AND p.stock_quantity <= 5`;
+    }
+
+    // Get total count for pagination
+    const countQuery = `SELECT COUNT(*)::int as total FROM (${query}) AS filtered_tbl`;
+    const countRes = await sql(countQuery, params);
+    const totalCount = countRes[0]?.total || 0;
+
+    query += ` ORDER BY p.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limit, offset);
 
     const products = await sql(query, params);
 
-    // For each product, use default_image or image_url for the thumbnail
     const enrichedProducts = products.map((p) => ({
       ...p,
       thumbnail_url: p.default_image || p.image_url,
     }));
 
-    return Response.json({ products: enrichedProducts });
+    return Response.json({
+      products: enrichedProducts,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    });
   } catch (error) {
-    console.error("Error fetching products:", error);
+    console.error("Error fetching admin products:", error);
     return Response.json(
       { error: "Failed to fetch products" },
       { status: 500 }
@@ -64,9 +85,9 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const body = await request.json();
@@ -87,32 +108,58 @@ export async function POST(request) {
       images,
     } = body;
 
-    if (!name || !slug || !price || !category_id) {
+    const trimmedName = sanitizeText(name, 255);
+    const cleanSlug = sanitizeText(slug, 255)
+      .toLowerCase()
+      .replace(/[^a-z0-9\-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const parsedPrice = parseFloat(price);
+    const parsedCatId = parseInt(category_id, 10);
+    const parsedStock = parseInt(stock_quantity || 0, 10);
+
+    if (!trimmedName || !cleanSlug || isNaN(parsedPrice) || parsedPrice <= 0 || isNaN(parsedCatId)) {
       return Response.json(
-        { error: "Missing required fields" },
+        { error: "Valid name, slug, positive price, and category are required." },
         { status: 400 }
       );
     }
 
     const products = await sql`
-      INSERT INTO products (name, slug, description, price, compare_price, sale_price, image_url, category_id, sub_category_id, stock_quantity, brand, weight, is_active)
-      VALUES (${name}, ${slug}, ${description || null}, ${price}, ${compare_price || null}, ${sale_price || null}, ${image_url || null}, ${category_id}, ${sub_category_id || null}, ${stock_quantity || 0}, ${brand || null}, ${weight || null}, ${is_active !== undefined ? is_active : true})
+      INSERT INTO products (
+        name, slug, description, price, compare_price, sale_price,
+        image_url, category_id, sub_category_id, stock_quantity,
+        brand, weight, is_active
+      )
+      VALUES (
+        ${trimmedName}, ${cleanSlug}, ${description || null}, ${parsedPrice},
+        ${compare_price ? parseFloat(compare_price) : null},
+        ${sale_price ? parseFloat(sale_price) : null},
+        ${image_url || null}, ${parsedCatId},
+        ${sub_category_id ? parseInt(sub_category_id, 10) : null},
+        ${parsedStock >= 0 ? parsedStock : 0},
+        ${brand ? sanitizeText(brand, 100) : null},
+        ${weight ? sanitizeText(weight, 50) : null},
+        ${is_active !== undefined ? Boolean(is_active) : true}
+      )
       RETURNING *
     `;
 
     const product = products[0];
 
     // Insert product images if provided
-    if (images && images.length > 0) {
+    if (images && Array.isArray(images) && images.length > 0) {
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
-        await sql`
-          INSERT INTO product_images (product_id, image_url, is_default, sort_order)
-          VALUES (${product.id}, ${img.url}, ${i === 0 ? true : false}, ${i})
-        `;
+        if (img?.url) {
+          await sql`
+            INSERT INTO product_images (product_id, image_url, is_default, sort_order)
+            VALUES (${product.id}, ${img.url}, ${i === 0}, ${i})
+          `;
+        }
       }
-      // Update main image_url with the default image
-      if (images[0]) {
+      if (images[0]?.url) {
         await sql`UPDATE products SET image_url = ${images[0].url} WHERE id = ${product.id}`;
         product.image_url = images[0].url;
       }

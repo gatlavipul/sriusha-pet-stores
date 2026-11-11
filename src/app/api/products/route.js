@@ -4,24 +4,31 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
+    const categoryId = searchParams.get("category_id");
     const search = searchParams.get("search");
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const offset = Math.max(0, parseInt(searchParams.get("offset") || "0", 10));
 
     let query =
-      "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_active = true";
+      "SELECT p.*, c.name as category_name, c.slug as category_slug FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_active = true";
     const params = [];
     let paramIndex = 1;
 
     if (category) {
       query += ` AND c.slug = $${paramIndex}`;
-      params.push(category);
+      params.push(category.toLowerCase().trim());
+      paramIndex++;
+    }
+
+    if (categoryId) {
+      query += ` AND p.category_id = $${paramIndex}`;
+      params.push(parseInt(categoryId, 10));
       paramIndex++;
     }
 
     if (search) {
-      query += ` AND (LOWER(p.name) LIKE LOWER($${paramIndex}) OR LOWER(p.description) LIKE LOWER($${paramIndex}))`;
-      params.push(`%${search}%`);
+      query += ` AND (LOWER(p.name) LIKE LOWER($${paramIndex}) OR LOWER(COALESCE(p.brand, '')) LIKE LOWER($${paramIndex}) OR LOWER(COALESCE(p.description, '')) LIKE LOWER($${paramIndex}))`;
+      params.push(`%${search.trim()}%`);
       paramIndex++;
     }
 
@@ -34,7 +41,7 @@ export async function GET(request) {
     console.error("Error fetching products:", error);
     return Response.json(
       { error: "Failed to fetch products" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

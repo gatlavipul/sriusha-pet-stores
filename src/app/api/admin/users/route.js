@@ -1,19 +1,12 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin, validateEmail, sanitizeText } from "@/app/api/utils/security";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user is admin
-    const currentUser =
-      await sql`SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1`;
-    if (currentUser[0]?.role !== "admin") {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const users = await sql`
@@ -23,7 +16,7 @@ export async function GET() {
         u.email, 
         u.role, 
         u.created_at,
-        COUNT(o.id) as total_orders,
+        COUNT(o.id)::int as total_orders,
         COALESCE(SUM(o.total_amount), 0) as total_spent,
         (SELECT customer_phone FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as phone,
         (SELECT shipping_address || ', ' || shipping_city || ' - ' || shipping_pincode FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as address
@@ -35,23 +28,16 @@ export async function GET() {
 
     return Response.json({ users });
   } catch (error) {
-    console.error("Error fetching users:", error);
+    console.error("Error fetching admin users:", error);
     return Response.json({ error: "Failed to fetch users" }, { status: 500 });
   }
 }
 
 export async function POST(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user is admin
-    const currentUser =
-      await sql`SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1`;
-    if (currentUser[0]?.role !== "admin") {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const body = await request.json();
@@ -60,24 +46,34 @@ export async function POST(request) {
     if (!email || !password || !role) {
       return Response.json(
         { error: "Email, password, and role are required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
+    if (!validateEmail(email)) {
+      return Response.json({ error: "Invalid email address format" }, { status: 400 });
+    }
+
+    if (password.length < 6) {
+      return Response.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanRole = role === "admin" ? "admin" : "customer";
+
     // Check if user already exists
-    const existing =
-      await sql`SELECT id FROM auth_users WHERE email = ${email} LIMIT 1`;
+    const existing = await sql`SELECT id FROM auth_users WHERE email = ${cleanEmail} LIMIT 1`;
     if (existing.length > 0) {
       return Response.json(
-        { error: "User with this email already exists" },
-        { status: 400 },
+        { error: "A user with this email address already exists" },
+        { status: 400 }
       );
     }
 
     // Create new user
     const newUsers = await sql`
       INSERT INTO auth_users (email, name, role, "emailVerified")
-      VALUES (${email}, ${name || null}, ${role}, NULL)
+      VALUES (${cleanEmail}, ${name ? sanitizeText(name, 100) : null}, ${cleanRole}, NULL)
       RETURNING id, email, name, role
     `;
 

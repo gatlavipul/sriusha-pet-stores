@@ -1,11 +1,13 @@
 import { put } from "@vercel/blob";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/app/api/utils/security";
+import fs from "fs";
+import path from "path";
 
 export async function POST(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const formData = await request.formData();
@@ -32,13 +34,37 @@ export async function POST(request) {
       );
     }
 
-    // Upload to Vercel Blob
-    const blob = await put(`uploads/${Date.now()}-${file.name}`, file, {
-      access: "public",
-    });
+    // If Vercel Blob token is configured, use Vercel Blob
+    if (process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN !== "your_vercel_blob_read_write_token") {
+      const blob = await put(`uploads/${Date.now()}-${file.name}`, file, {
+        access: "public",
+      });
+
+      return Response.json({
+        url: blob.url,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      });
+    }
+
+    // Local filesystem fallback for dev
+    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const ext = path.extname(file.name) || ".png";
+    const safeBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_\-]/g, "_");
+    const filename = `${Date.now()}-${safeBase}${ext}`;
+    const filePath = path.join(uploadsDir, filename);
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    fs.writeFileSync(filePath, buffer);
 
     return Response.json({
-      url: blob.url,
+      url: `/uploads/${filename}`,
       name: file.name,
       size: file.size,
       type: file.type,
@@ -46,7 +72,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Error uploading file:", error);
     return Response.json(
-      { error: "Failed to upload file" },
+      { error: "Failed to upload file: " + error.message },
       { status: 500 }
     );
   }

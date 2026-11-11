@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { Package, ShoppingBag, IndianRupee, Clock, TrendingUp, AlertCircle } from "lucide-react";
+import {
+  Package,
+  ShoppingBag,
+  IndianRupee,
+  Clock,
+  TrendingUp,
+  AlertCircle,
+  Users,
+  AlertTriangle,
+  ArrowRight,
+} from "lucide-react";
 import useUser from "@/utils/useUser";
 
 export default function AdminDashboard() {
@@ -8,20 +18,17 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [authStatus, setAuthStatus] = useState("checking"); // checking, authenticated, unauthorized, unauthenticated
+  const [authStatus, setAuthStatus] = useState("checking");
 
   useEffect(() => {
-    console.log("[Admin Dashboard] userLoading:", userLoading, "user:", user);
     if (userLoading) {
       setAuthStatus("checking");
     } else if (!user) {
-      console.log("[Admin Dashboard] No user found, redirecting to sign in");
       setAuthStatus("unauthenticated");
       if (typeof window !== "undefined") {
         window.location.href = "/account/signin?callbackUrl=/admin";
       }
     } else {
-      console.log("[Admin Dashboard] User found, checking admin access");
       setAuthStatus("authenticated");
       checkAdminAccess();
     }
@@ -65,34 +72,28 @@ export default function AdminDashboard() {
       <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA]">
         <div className="text-center">
           <div className="inline-flex items-center gap-2 text-sm text-[#6B7280]">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#2ECC71] border-t-transparent" />
-            Checking authentication...
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent" />
+            Checking admin privileges...
           </div>
         </div>
       </div>
     );
   }
 
-  if (authStatus === "unauthenticated") {
+  if (authStatus === "unauthenticated" || authStatus === "unauthorized") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA]">
-        <div className="text-center">
-          <div className="inline-flex items-center gap-2 text-sm text-[#6B7280]">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#2ECC71] border-t-transparent" />
-            Redirecting to sign in...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (authStatus === "unauthorized") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA]">
-        <div className="text-center">
-          <p className="text-sm text-[#6B7280]">You don't have admin access.</p>
-          <a href="/" className="text-sm text-[#27AE60] hover:underline mt-2 inline-block">
-            Go to Home
+      <div className="min-h-screen flex items-center justify-center bg-[#F8F9FA] p-4">
+        <div className="max-w-md w-full rounded-2xl bg-white border border-gray-200 p-8 text-center shadow-xs">
+          <AlertCircle size={40} className="mx-auto text-red-500 mb-3" />
+          <h2 className="text-lg font-bold text-gray-900 mb-1">Administrator Access Required</h2>
+          <p className="text-xs text-gray-500 mb-6">
+            You must be signed in with an authorized Sri Usha administrator account to view this portal.
+          </p>
+          <a
+            href="/account/signin?callbackUrl=/admin"
+            className="rounded-xl bg-[#2563EB] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8]"
+          >
+            Sign In with Admin Account
           </a>
         </div>
       </div>
@@ -103,11 +104,9 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen bg-[#F8F9FA]">
         <AdminHeader />
-        <div className="mx-auto max-w-7xl px-4 py-12 text-center">
-          <div className="inline-flex items-center gap-2 text-sm text-[#6B7280]">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#2ECC71] border-t-transparent" />
-            Loading dashboard...
-          </div>
+        <div className="mx-auto max-w-7xl px-4 py-16 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mx-auto mb-3" />
+          <p className="text-xs text-gray-500 font-medium">Loading store analytics...</p>
         </div>
       </div>
     );
@@ -115,32 +114,34 @@ export default function AdminDashboard() {
 
   const statCards = [
     {
-      label: "Total Products",
-      value: stats?.totalProducts || 0,
-      icon: Package,
-      iconBg: "bg-[#E8F8F0]",
-      iconColor: "text-[#27AE60]",
+      label: "Total Revenue",
+      value: `₹${parseFloat(stats?.totalRevenue || 0).toLocaleString("en-IN")}`,
+      sub: "Verified paid & delivered orders",
+      icon: IndianRupee,
+      iconBg: "bg-emerald-50 text-emerald-700",
     },
     {
       label: "Total Orders",
       value: stats?.totalOrders || 0,
+      sub: `${stats?.pendingOrders || 0} active / pending`,
       icon: ShoppingBag,
-      iconBg: "bg-[#E8F8F0]",
-      iconColor: "text-[#27AE60]",
+      iconBg: "bg-blue-50 text-[#2563EB]",
     },
     {
-      label: "Total Revenue",
-      value: `₹${stats?.totalRevenue?.toFixed(2) || "0.00"}`,
-      icon: IndianRupee,
-      iconBg: "bg-[#FEF3E2]",
-      iconColor: "text-[#F39C12]",
+      label: "Live Catalog",
+      value: stats?.totalProducts || 0,
+      sub: "Active products in store",
+      icon: Package,
+      iconBg: "bg-indigo-50 text-indigo-700",
     },
     {
-      label: "Pending Orders",
-      value: stats?.pendingOrders || 0,
-      icon: Clock,
-      iconBg: "bg-[#FEF3E2]",
-      iconColor: "text-[#F39C12]",
+      label: "Low Stock Alert",
+      value: stats?.lowStockProducts || 0,
+      sub: "5 or fewer units remaining",
+      icon: AlertTriangle,
+      iconBg: stats?.lowStockProducts > 0 ? "bg-amber-50 text-amber-800" : "bg-gray-50 text-gray-600",
+      alert: stats?.lowStockProducts > 0,
+      link: "/admin/products?low_stock=true",
     },
   ];
 
@@ -149,112 +150,151 @@ export default function AdminDashboard() {
       <AdminHeader />
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-[#111827]">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-[#6B7280]">
-            Welcome to Sri Usha Vet & Pet Stores admin panel
-          </p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
+              Admin Overview &amp; Metrics
+            </h1>
+            <p className="mt-1 text-xs text-gray-500">
+              Sri Usha Vet &amp; Pet Stores • Uppal, Hyderabad Operation Portal
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <a
+              href="/admin/products/new"
+              className="rounded-xl bg-[#2563EB] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-colors"
+            >
+              + Add New Product
+            </a>
+            <a
+              href="/admin/orders"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Manage Orders
+            </a>
+          </div>
         </div>
 
-        {/* Stat Cards */}
-        <div className="mb-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Stat Cards Grid */}
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {statCards.map((card) => (
             <div
               key={card.label}
-              className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+              className={`rounded-2xl border bg-white p-5 shadow-xs transition-shadow hover:shadow-md ${
+                card.alert ? "border-amber-300 bg-amber-50/30" : "border-gray-200"
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                     {card.label}
                   </p>
-                  <p className="mt-2 text-2xl font-bold text-[#111827]">
+                  <p className="mt-1 text-2xl font-extrabold text-gray-900">
                     {card.value}
                   </p>
+                  <p className="mt-1 text-[11px] text-gray-500">{card.sub}</p>
                 </div>
-                <div className={`rounded-xl ${card.iconBg} p-3`}>
-                  <card.icon size={24} className={card.iconColor} />
+                <div className={`rounded-xl p-3 ${card.iconBg}`}>
+                  <card.icon size={22} />
                 </div>
               </div>
+
+              {card.link && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <a
+                    href={card.link}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 hover:underline"
+                  >
+                    <span>View low stock items</span>
+                    <ArrowRight size={12} />
+                  </a>
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        {/* Recent Orders */}
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+        {/* Recent Orders Section */}
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <TrendingUp size={18} className="text-[#27AE60]" />
-              <h2 className="text-base font-semibold text-[#111827]">
-                Recent Orders
+              <TrendingUp size={18} className="text-[#2563EB]" />
+              <h2 className="text-base font-bold text-gray-900">
+                Recent Customer Orders
               </h2>
             </div>
             <a
               href="/admin/orders"
-              className="text-sm font-medium text-[#27AE60] hover:text-[#2ECC71]"
+              className="text-xs font-bold text-[#2563EB] hover:underline"
             >
-              View All
+              View All Orders →
             </a>
           </div>
 
           {recentOrders.length === 0 ? (
-            <div className="py-12 text-center">
-              <AlertCircle size={32} className="mx-auto mb-2 text-[#D1D5DB]" />
-              <p className="text-sm text-[#6B7280]">No orders yet</p>
+            <div className="py-12 text-center text-xs text-gray-400">
+              No orders placed yet.
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-[#E5E7EB]">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-gray-100 bg-gray-50/50">
                   <tr>
-                    <th className="pb-3 text-xs font-medium uppercase tracking-wide text-[#6B7280]">
-                      Order ID
+                    <th className="py-3 px-3 font-bold text-gray-500 uppercase tracking-wider">
+                      Order No.
                     </th>
-                    <th className="pb-3 text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+                    <th className="py-3 px-3 font-bold text-gray-500 uppercase tracking-wider">
                       Customer
                     </th>
-                    <th className="pb-3 text-xs font-medium uppercase tracking-wide text-[#6B7280]">
-                      Date
+                    <th className="py-3 px-3 font-bold text-gray-500 uppercase tracking-wider">
+                      Payment
                     </th>
-                    <th className="pb-3 text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+                    <th className="py-3 px-3 font-bold text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="pb-3 text-right text-xs font-medium uppercase tracking-wide text-[#6B7280]">
-                      Amount
+                    <th className="py-3 px-3 font-bold text-gray-500 uppercase tracking-wider text-right">
+                      Total
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#F3F4F6]">
+                <tbody className="divide-y divide-gray-100">
                   {recentOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-[#F8F9FA]">
-                      <td className="py-3 text-sm font-semibold text-[#111827]">
-                        #{order.id}
+                    <tr key={order.id} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="py-3 px-3 font-extrabold text-gray-900">
+                        <a href={`/admin/orders`} className="hover:text-[#2563EB]">
+                          {order.order_number}
+                        </a>
                       </td>
-                      <td className="py-3 text-sm text-[#6B7280]">
-                        {order.customer_name}
+                      <td className="py-3 px-3 text-gray-700">
+                        <div className="font-semibold">{order.customer_name}</div>
+                        <div className="text-[10px] text-gray-400">{order.customer_email}</div>
                       </td>
-                      <td className="py-3 text-sm text-[#6B7280]">
-                        {new Date(order.created_at).toLocaleDateString("en-IN")}
+                      <td className="py-3 px-3">
+                        <span className="font-semibold uppercase text-gray-700">
+                          {order.payment_method}
+                        </span>
+                        <span className="text-[10px] text-gray-400 ml-1">
+                          ({order.payment_status})
+                        </span>
                       </td>
-                      <td className="py-3">
+                      <td className="py-3 px-3">
                         <span
-                          className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            order.status === "pending"
-                              ? "bg-[#FEF3E2] text-[#F39C12]"
-                              : order.status === "completed"
-                              ? "bg-[#E8F8F0] text-[#27AE60]"
+                          className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            order.status === "delivered"
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                              : order.status === "shipped"
+                              ? "bg-indigo-50 text-indigo-800 border border-indigo-200"
                               : order.status === "cancelled"
-                              ? "bg-red-50 text-red-600"
-                              : "bg-[#F3F4F6] text-[#6B7280]"
+                              ? "bg-red-50 text-red-800 border border-red-200"
+                              : "bg-blue-50 text-blue-800 border border-blue-200"
                           }`}
                         >
                           {order.status}
                         </span>
                       </td>
-                      <td className="py-3 text-right text-sm font-semibold text-[#111827]">
-                        ₹{parseFloat(order.total_amount).toFixed(2)}
+                      <td className="py-3 px-3 text-right font-extrabold text-gray-900">
+                        ₹{parseFloat(order.total_amount).toFixed(0)}
                       </td>
                     </tr>
                   ))}
