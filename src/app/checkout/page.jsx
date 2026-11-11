@@ -21,6 +21,16 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [saveAddressToBook, setSaveAddressToBook] = useState(false);
 
+  // Delivery Serviceability State
+  const [serviceability, setServiceability] = useState({
+    checked: false,
+    serviceable: true,
+    message: "",
+    deliveryCharge: 40,
+    estimatedDeliveryTime: "Same-day in 2-4 hours",
+  });
+  const [checkingPincode, setCheckingPincode] = useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -31,6 +41,41 @@ export default function CheckoutPage() {
     paymentMethod: "cod", // default to COD for instant testing, supports razorpay
     notes: "",
   });
+
+  // Verify delivery serviceability on pincode or subtotal change
+  useEffect(() => {
+    const cleanPin = (formData.pincode || "").trim().replace(/\s+/g, "");
+    if (cleanPin.length === 6) {
+      setCheckingPincode(true);
+      fetch(`/api/serviceability?pincode=${cleanPin}&subtotal=${subtotal}`)
+        .then((r) => r.json())
+        .then((d) => {
+          setServiceability({
+            checked: true,
+            serviceable: d.serviceable,
+            message: d.message || d.reason,
+            deliveryCharge: d.deliveryCharge ?? (subtotal >= 500 ? 0 : 40),
+            estimatedDeliveryTime: d.estimatedDeliveryTime || "Same-day in 2-4 hours",
+            areaName: d.areaName,
+          });
+        })
+        .catch(() => {
+          setServiceability({
+            checked: true,
+            serviceable: true,
+            deliveryCharge: subtotal >= 500 ? 0 : 40,
+            estimatedDeliveryTime: "Same-day in 2-4 hours",
+          });
+        })
+        .finally(() => setCheckingPincode(false));
+    } else {
+      setServiceability({
+        checked: false,
+        serviceable: false,
+        message: "Enter a valid 6-digit Hyderabad pincode (e.g. 500039)",
+      });
+    }
+  }, [formData.pincode, subtotal]);
 
   // Prefill with logged in user data and fetch saved addresses if present
   useEffect(() => {
@@ -74,7 +119,11 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  const deliveryCharge = isFreeShipping || subtotal === 0 ? 0 : 40;
+  const deliveryCharge = isFreeShipping || subtotal === 0 
+    ? 0 
+    : serviceability.checked 
+    ? serviceability.deliveryCharge 
+    : subtotal >= 500 ? 0 : 40;
   const total = subtotal + deliveryCharge;
 
   const handleSubmit = async (e) => {
@@ -86,6 +135,11 @@ export default function CheckoutPage() {
 
     if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.address.trim()) {
       setError("Please fill in all required delivery contact and address details.");
+      return;
+    }
+
+    if (serviceability.checked && !serviceability.serviceable) {
+      setError(serviceability.message || "Doorstep delivery is currently not available for this pincode.");
       return;
     }
 
@@ -120,7 +174,6 @@ export default function CheckoutPage() {
           body: JSON.stringify({
             ...orderDataPayload,
             payment_status: "pending",
-            status: "processing",
           }),
         });
 
@@ -435,8 +488,29 @@ export default function CheckoutPage() {
                         onChange={(e) =>
                           setFormData({ ...formData, pincode: e.target.value })
                         }
-                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs sm:text-sm outline-none focus:border-[#2563EB]"
+                        className={`w-full rounded-xl border bg-white px-4 py-2.5 text-xs sm:text-sm outline-none transition-all ${
+                          serviceability.checked
+                            ? serviceability.serviceable
+                              ? "border-emerald-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+                              : "border-red-400 focus:border-red-600 focus:ring-2 focus:ring-red-500/20"
+                            : "border-gray-300 focus:border-[#2563EB]"
+                        }`}
                       />
+                      {checkingPincode && (
+                        <p className="mt-1.5 text-[11px] font-semibold text-gray-400 animate-pulse">
+                          Checking Hyderabad doorstep delivery coverage...
+                        </p>
+                      )}
+                      {!checkingPincode && serviceability.checked && serviceability.serviceable && (
+                        <div className="mt-1.5 rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-[11px] font-semibold text-emerald-800">
+                          <span className="font-bold">✓ Serviceable:</span> {serviceability.message}
+                        </div>
+                      )}
+                      {!checkingPincode && serviceability.checked && !serviceability.serviceable && (
+                        <div className="mt-1.5 rounded-lg bg-red-50 border border-red-200 p-2 text-[11px] font-semibold text-red-700">
+                          <span className="font-bold">✕ Delivery Unavailable:</span> {serviceability.message}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -530,8 +604,8 @@ export default function CheckoutPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={processing}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#2563EB] py-4 text-sm font-bold text-white shadow-md hover:bg-[#1D4ED8] hover:shadow-lg transition-all disabled:opacity-50"
+                disabled={processing || (serviceability.checked && !serviceability.serviceable)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#2563EB] py-4 text-sm font-bold text-white shadow-md hover:bg-[#1D4ED8] hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? (
                   <>

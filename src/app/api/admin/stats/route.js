@@ -23,9 +23,10 @@ export async function GET() {
       SELECT COUNT(*)::int as count FROM orders
     `;
 
-    // 4. Pending orders count
+    // 4. Pending / active orders count in progress
     const pendingOrders = await sql`
-      SELECT COUNT(*)::int as count FROM orders WHERE status IN ('pending', 'processing')
+      SELECT COUNT(*)::int as count FROM orders 
+      WHERE status IN ('placed', 'confirmed', 'packing', 'ready_for_delivery', 'assigned', 'out_for_delivery', 'pending', 'processing')
     `;
 
     // 5. Total customers count
@@ -33,14 +34,25 @@ export async function GET() {
       SELECT COUNT(*)::int as count FROM auth_users WHERE role = 'customer'
     `;
 
-    // 6. Total revenue (sum of orders that are marked 'paid' OR delivered COD)
+    // 6. Total revenue (strictly excluding cancelled, refunded, or failed orders)
     const revenueRes = await sql`
       SELECT COALESCE(SUM(total_amount), 0) as total 
       FROM orders 
-      WHERE payment_status = 'paid' OR (payment_method = 'cod' AND status = 'delivered')
+      WHERE status NOT IN ('cancelled', 'failed')
+        AND (payment_status = 'paid' OR (payment_method = 'cod' AND status = 'delivered'))
     `;
 
-    // 7. Recent orders with items count
+    // 7. Delivery exceptions count (orders marked delivery_failed)
+    const deliveryExceptions = await sql`
+      SELECT COUNT(*)::int as count FROM orders WHERE status = 'delivery_failed'
+    `;
+
+    // 8. Unread admin notifications count
+    const unreadNotifications = await sql`
+      SELECT COUNT(*)::int as count FROM admin_notifications WHERE is_read = false
+    `;
+
+    // 9. Recent orders with items count
     const recentOrders = await sql`
       SELECT 
         o.id,
@@ -68,6 +80,8 @@ export async function GET() {
         pendingOrders: pendingOrders[0]?.count || 0,
         totalCustomers: totalCustomers[0]?.count || 0,
         totalRevenue: parseFloat(revenueRes[0]?.total || 0),
+        deliveryExceptions: deliveryExceptions[0]?.count || 0,
+        unreadNotifications: unreadNotifications[0]?.count || 0,
       },
       recentOrders,
     });

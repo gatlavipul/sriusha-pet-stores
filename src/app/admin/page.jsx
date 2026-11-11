@@ -10,6 +10,10 @@ import {
   Users,
   AlertTriangle,
   ArrowRight,
+  Bell,
+  BarChart3,
+  MapPin,
+  Truck,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 
@@ -123,16 +127,9 @@ export default function AdminDashboard() {
     {
       label: "Total Orders",
       value: stats?.totalOrders || 0,
-      sub: `${stats?.pendingOrders || 0} active / pending`,
+      sub: `${stats?.pendingOrders || 0} active / in-progress`,
       icon: ShoppingBag,
       iconBg: "bg-blue-50 text-[#2563EB]",
-    },
-    {
-      label: "Live Catalog",
-      value: stats?.totalProducts || 0,
-      sub: "Active products in store",
-      icon: Package,
-      iconBg: "bg-indigo-50 text-indigo-700",
     },
     {
       label: "Low Stock Alert",
@@ -143,6 +140,15 @@ export default function AdminDashboard() {
       alert: stats?.lowStockProducts > 0,
       link: "/admin/products?low_stock=true",
     },
+    {
+      label: "Delivery Exceptions",
+      value: stats?.deliveryExceptions || 0,
+      sub: stats?.deliveryExceptions > 0 ? "Failed runs needing dispatch review" : "All dispatches on track",
+      icon: Truck,
+      iconBg: stats?.deliveryExceptions > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700",
+      alert: stats?.deliveryExceptions > 0,
+      link: "/admin/orders?status=delivery_failed",
+    },
   ];
 
   return (
@@ -150,31 +156,76 @@ export default function AdminDashboard() {
       <AdminHeader />
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
-              Admin Overview &amp; Metrics
+              Admin Overview &amp; Operations
             </h1>
             <p className="mt-1 text-xs text-gray-500">
               Sri Usha Vet &amp; Pet Stores • Uppal, Hyderabad Operation Portal
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="/admin/analytics"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-2xs"
+            >
+              <BarChart3 size={14} className="text-[#2563EB]" />
+              Analytics
+            </a>
+            <a
+              href="/admin/serviceability"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-2xs"
+            >
+              <MapPin size={14} className="text-[#EA580C]" />
+              Delivery Zones
+            </a>
+            <a
+              href="/admin/notifications"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-2xs relative"
+            >
+              <Bell size={14} className="text-purple-600" />
+              Notifications
+              {stats?.unreadNotifications > 0 && (
+                <span className="ml-1 rounded-full bg-red-600 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
+                  {stats.unreadNotifications}
+                </span>
+              )}
+            </a>
             <a
               href="/admin/products/new"
               className="rounded-xl bg-[#2563EB] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-colors"
             >
-              + Add New Product
-            </a>
-            <a
-              href="/admin/orders"
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Manage Orders
+              + Add Product
             </a>
           </div>
         </div>
+
+        {/* Operational Attention Alerts */}
+        {stats?.deliveryExceptions > 0 && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50/80 p-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-xs font-extrabold text-red-950">
+                    Action Required: {stats.deliveryExceptions} Delivery Exception{stats.deliveryExceptions > 1 ? "s" : ""}
+                  </h3>
+                  <p className="text-xs text-red-800 mt-0.5">
+                    Delivery runs failed due to customer unavailability or wrong address. Please review and reassign.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/admin/orders?status=delivery_failed"
+                className="shrink-0 rounded-xl bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-red-700 transition-colors self-start sm:self-center"
+              >
+                Review Failed Runs →
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Stat Cards Grid */}
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

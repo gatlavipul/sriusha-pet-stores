@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   XCircle,
   AlertTriangle,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 import {
@@ -26,6 +28,7 @@ import {
 export default function OrderDetailPage({ params }) {
   const { data: user } = useUser();
   const [order, setOrder] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -53,6 +56,18 @@ export default function OrderDetailPage({ params }) {
       if (res.ok) {
         const data = await res.json();
         setOrder(data.order);
+
+        // Fetch notifications dispatched for this order
+        try {
+          const emailParam = data.order?.customer_email ? `?email=${encodeURIComponent(data.order.customer_email)}` : "";
+          const notifRes = await fetch(`/api/orders/${params.id}/notifications${emailParam}`);
+          if (notifRes.ok) {
+            const notifData = await notifRes.json();
+            setNotifications(notifData.notifications || []);
+          }
+        } catch (notifErr) {
+          console.error("Failed to load notifications:", notifErr);
+        }
       }
     } catch (error) {
       console.error(error);
@@ -372,6 +387,60 @@ export default function OrderDetailPage({ params }) {
               ))}
             </div>
           </div>
+
+          {/* Dispatched Notifications & Order Updates */}
+          {notifications && notifications.length > 0 && (
+            <div className="py-6 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Mail size={14} className="text-[#2563EB]" />
+                  <span>Dispatched Notifications &amp; Customer Updates</span>
+                </div>
+                <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full">
+                  {notifications.length} {notifications.length === 1 ? "Message" : "Messages"} Sent
+                </span>
+              </div>
+              <div className="space-y-3">
+                {notifications.map((notif) => (
+                  <div
+                    key={notif.id}
+                    className="p-3.5 rounded-2xl border border-gray-100 bg-gray-50/70 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                            notif.channel === "email"
+                              ? "bg-blue-100 text-blue-700"
+                              : notif.channel === "sms"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          {notif.channel === "email" ? (
+                            <Mail size={10} />
+                          ) : (
+                            <MessageSquare size={10} />
+                          )}
+                          {notif.channel}
+                        </span>
+                        <span className="text-xs font-bold text-gray-900">{notif.title}</span>
+                      </div>
+                      <span className="text-[11px] text-gray-400">
+                        {new Date(notif.created_at).toLocaleTimeString("en-IN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed font-sans">{notif.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Customer & Shipping Details Grid */}
           <div className="py-6 grid gap-6 sm:grid-cols-2 text-xs border-b border-gray-100">

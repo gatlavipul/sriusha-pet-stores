@@ -1,6 +1,8 @@
 import sql from "@/app/api/utils/sql";
 import { requireDeliveryPartner, sanitizeText } from "@/app/api/utils/security";
 import { ORDER_STATUS, validateTransition } from "@/utils/orderWorkflow";
+import { triggerOrderNotifications, NOTIFICATION_TYPES } from "@/utils/notificationService";
+import logger from "@/utils/logger";
 
 export async function PUT(request, { params }) {
   try {
@@ -86,7 +88,7 @@ export async function PUT(request, { params }) {
         )
       `;
 
-      // Notify administrator through admin_notifications
+      // Notify administrator and customer
       const orderRef = currentOrder.order_number || `Order #${currentOrder.id}`;
       await sql`
         INSERT INTO admin_notifications (
@@ -100,6 +102,17 @@ export async function PUT(request, { params }) {
       `;
 
       const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      await triggerOrderNotifications(NOTIFICATION_TYPES.DELIVERY_FAILED, updated[0], {
+        failureReason: cleanReason,
+        driverName: authResult.user.name,
+      });
+
+      logger.warn("delivery_attempt_failed", `Delivery failed for order ${orderRef}: ${cleanReason}`, {
+        orderId: id,
+        driverId: partnerId,
+        reason: cleanReason,
+      });
+
       return Response.json({
         success: true,
         message: "Delivery exception reported. Administrator has been alerted for re-dispatch or review.",
@@ -135,6 +148,17 @@ export async function PUT(request, { params }) {
       `;
 
       const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_DELIVERED, updated[0], {
+        driverName: authResult.user.name,
+      });
+
+      logger.info("order_delivered_success", `Order #${id} marked as delivered by ${authResult.user.name}`, {
+        orderId: id,
+        driverId: partnerId,
+        isCOD,
+        targetPaymentStatus,
+      });
+
       return Response.json({
         success: true,
         message: "Order marked as delivered successfully.",
@@ -165,6 +189,15 @@ export async function PUT(request, { params }) {
       `;
 
       const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      await triggerOrderNotifications(NOTIFICATION_TYPES.OUT_FOR_DELIVERY, updated[0], {
+        driverName: authResult.user.name,
+      });
+
+      logger.info("order_out_for_delivery", `Order #${id} out for delivery with ${authResult.user.name}`, {
+        orderId: id,
+        driverId: partnerId,
+      });
+
       return Response.json({
         success: true,
         message: "Order is now out for delivery.",

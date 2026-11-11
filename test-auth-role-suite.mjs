@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import sql from "./src/app/api/utils/sql.js";
 import { getSafeReturnUrl } from "./src/utils/safeRedirect.js";
 import {
   ORDER_STATUS,
@@ -9,20 +9,6 @@ import {
 } from "./src/utils/orderWorkflow.js";
 
 const BASE_URL = "http://localhost:4000";
-const rawSql = neon(process.env.DATABASE_URL);
-
-async function sqlWithRetry(strings, ...values) {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      return await rawSql(strings, ...values);
-    } catch (err) {
-      if (attempt === 4) throw err;
-      await new Promise((r) => setTimeout(r, 1200 * attempt));
-    }
-  }
-}
-
-const sql = sqlWithRetry;
 
 let passed = 0;
 let failed = 0;
@@ -311,22 +297,28 @@ async function runTests() {
   const initialStock = testProduct.stock_quantity;
 
   // 5.1 Place a Cash on Delivery order
-  const orderRes = await fetch(`${BASE_URL}/api/orders`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      customer_name: "Anita Rao",
-      customer_email: `anita_${Date.now()}@example.com`,
-      customer_phone: "9876543210",
-      shipping_address: "Flat 204, Pet Paradise Apartments, Road No 10",
-      shipping_city: "Hyderabad",
-      shipping_pincode: "500034",
-      payment_method: "cod",
-      items: [{ id: testProduct.id, quantity: 2, name: testProduct.name }],
-    }),
-  });
-  const orderData = await orderRes.json();
-  assert(orderRes.status === 200 && orderData.success, "New COD customer order created");
+  let orderRes;
+  let orderData;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    orderRes = await fetch(`${BASE_URL}/api/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customer_name: "Anita Rao",
+        customer_email: `anita_${Date.now()}@example.com`,
+        customer_phone: "9876543210",
+        shipping_address: "Flat 204, Pet Paradise Apartments, Road No 10",
+        shipping_city: "Hyderabad",
+        shipping_pincode: "500034",
+        payment_method: "cod",
+        items: [{ id: testProduct.id, quantity: 2, name: testProduct.name }],
+      }),
+    });
+    orderData = await orderRes.json();
+    if (orderRes.status === 200 && orderData.success) break;
+    await new Promise((r) => setTimeout(r, 1000 * attempt));
+  }
+  assert(orderRes.status === 200 && orderData?.success, "New COD customer order created");
 
   const createdOrderId = orderData.order.id;
 

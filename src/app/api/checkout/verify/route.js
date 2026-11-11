@@ -3,6 +3,13 @@ import { auth } from "@/auth";
 import crypto from "crypto";
 import { validateEmail, validatePhone, sanitizeText } from "@/app/api/utils/security";
 import { ORDER_STATUS } from "@/utils/orderWorkflow";
+import { checkServiceability } from "@/utils/serviceabilityService";
+import {
+  triggerOrderNotifications,
+  checkAndTriggerLowStock,
+  NOTIFICATION_TYPES,
+} from "@/utils/notificationService";
+import logger from "@/utils/logger";
 
 export async function POST(request) {
   try {
@@ -49,7 +56,10 @@ export async function POST(request) {
       expectedBuffer.length !== receivedBuffer.length ||
       !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
     ) {
-      console.error("Signature mismatch: received vs expected", razorpay_signature, expectedSignature);
+      logger.error("razorpay_signature_mismatch", "Payment signature verification failed", null, {
+        razorpay_order_id,
+        razorpay_payment_id,
+      });
       return Response.json(
         { error: "Payment signature verification failed. Untrusted payment transaction." },
         { status: 400 }
@@ -147,14 +157,30 @@ export async function POST(request) {
       });
 
       // Atomically decrement stock
-      await sql`
+      const updateRes = await sql`
         UPDATE products 
         SET stock_quantity = GREATEST(0, stock_quantity - ${qty}), updated_at = NOW()
         WHERE id = ${dbProd.id}
+        RETURNING stock_quantity
       `;
+      const remainingStock = updateRes[0]?.stock_quantity ?? 0;
+      await checkAndTriggerLowStock(dbProd.id, remainingStock, dbProd.name);
     }
 
-    const validDeliveryCharge = verifiedSubtotal >= 500 ? 0 : 40;
+    // 5.5 Verify Delivery Serviceability
+    const serviceability = await checkServiceability(cleanPincode, verifiedSubtotal);
+    if (!serviceability.serviceable) {
+      logger.warn("razorpay_unserviceable_pincode", "Verified order address not in serviceable zone", {
+        pincode: cleanPincode,
+        orderId: razorpay_order_id,
+      });
+      return Response.json(
+        { error: serviceability.reason || `Pincode ${cleanPincode} is currently not serviceable.` },
+        { status: 400 }
+      );
+    }
+
+    const validDeliveryCharge = serviceability.deliveryCharge;
     let promoDiscount = 0;
     if (promo_code) {
       const code = String(promo_code).toUpperCase().trim();
@@ -202,10 +228,19 @@ export async function POST(request) {
       VALUES (${order.id}, 'confirmed', ${userId}, 'customer', 'Payment verified via Razorpay online gateway')
     `;
 
-    // 8. Clear DB cart if logged in
+    // 8. Trigger Notifications (Admin notification + Customer confirmation)
+    await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_CONFIRMED, order);
+
+    // 9. Clear DB cart if logged in
     if (session?.user?.id) {
       await sql`DELETE FROM cart_items WHERE user_id = ${session.user.id}`;
     }
+
+    logger.info("razorpay_payment_verified", `Order ${orderNumber} verified and placed online for ₹${calculatedTotal}`, {
+      orderId: order.id,
+      orderNumber,
+      paymentId: razorpay_payment_id,
+    });
 
     return Response.json({
       success: true,

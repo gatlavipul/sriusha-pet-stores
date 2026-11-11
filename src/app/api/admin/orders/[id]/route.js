@@ -5,6 +5,8 @@ import {
   ALL_ORDER_STATUSES,
   validateTransition,
 } from "@/utils/orderWorkflow";
+import { triggerOrderNotifications, NOTIFICATION_TYPES } from "@/utils/notificationService";
+import logger from "@/utils/logger";
 
 const VALID_STATUSES = ALL_ORDER_STATUSES;
 
@@ -245,6 +247,18 @@ export async function PUT(request, { params }) {
           ${id}, ${targetStatus}, ${authResult.user.id}, 'admin', ${historyNotes}
         )
       `;
+
+      if (targetStatus === ORDER_STATUS.CONFIRMED) {
+        await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_CONFIRMED, updated[0]);
+      } else if (targetStatus === ORDER_STATUS.CANCELLED) {
+        await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_CANCELLED, updated[0]);
+      }
+
+      logger.info("admin_order_status_updated", `Admin ${authResult.user.id} updated order #${id} status to ${targetStatus}`, {
+        orderId: id,
+        previousStatus: currentOrder.status,
+        newStatus: targetStatus,
+      });
     }
 
     return Response.json({ success: true, order: updated[0] });

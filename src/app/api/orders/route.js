@@ -2,6 +2,13 @@ import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
 import { validateEmail, validatePhone, sanitizeText } from "@/app/api/utils/security";
 import { ORDER_STATUS } from "@/utils/orderWorkflow";
+import { checkServiceability } from "@/utils/serviceabilityService";
+import {
+  triggerOrderNotifications,
+  checkAndTriggerLowStock,
+  NOTIFICATION_TYPES,
+} from "@/utils/notificationService";
+import logger from "@/utils/logger";
 
 export async function GET() {
   try {
@@ -148,16 +155,32 @@ export async function POST(request) {
       });
     }
 
-    // Atomically decrement stock
+    // 4.5 Verify Delivery Serviceability to Customer Pincode
+    const serviceability = await checkServiceability(cleanPincode, verifiedSubtotal);
+    if (!serviceability.serviceable) {
+      logger.warn("unserviceable_checkout_rejected", "Checkout rejected for unserviceable pincode", {
+        pincode: cleanPincode,
+        email: cleanEmail,
+      });
+      return Response.json(
+        { error: serviceability.reason || `Doorstep delivery is currently not available to pincode ${cleanPincode}.` },
+        { status: 400 }
+      );
+    }
+
+    // Atomically decrement stock & track low-stock warnings
     for (const item of finalOrderItems) {
-      await sql`
+      const updateRes = await sql`
         UPDATE products 
         SET stock_quantity = GREATEST(0, stock_quantity - ${item.quantity}), updated_at = NOW()
         WHERE id = ${item.product_id}
+        RETURNING stock_quantity
       `;
+      const remainingStock = updateRes[0]?.stock_quantity ?? 0;
+      await checkAndTriggerLowStock(item.product_id, remainingStock, item.name);
     }
 
-    const deliveryCharge = verifiedSubtotal >= 500 ? 0 : 40;
+    const deliveryCharge = serviceability.deliveryCharge;
     let discount = 0;
     if (promo_code) {
       const code = String(promo_code).toUpperCase().trim();
@@ -209,10 +232,20 @@ export async function POST(request) {
       VALUES (${order.id}, ${orderStatus}, ${userId}, 'customer', 'Order placed by customer via Cash on Delivery')
     `;
 
-    // 7. Clear user DB cart if authenticated
+    // 7. Trigger Multi-Channel Notifications (Admin Alert + Customer Email/SMS Log)
+    await triggerOrderNotifications(NOTIFICATION_TYPES.NEW_ORDER, order);
+
+    // 8. Clear user DB cart if authenticated
     if (session?.user?.id) {
       await sql`DELETE FROM cart_items WHERE user_id = ${session.user.id}`;
     }
+
+    logger.info("cod_order_placed_success", `COD Order ${orderNumber} placed for ₹${finalTotal}`, {
+      orderId: order.id,
+      orderNumber,
+      itemCount: finalOrderItems.length,
+      pincode: cleanPincode,
+    });
 
     return Response.json({
       success: true,
@@ -223,7 +256,7 @@ export async function POST(request) {
       },
     });
   } catch (error) {
-    console.error("Error creating order:", error);
+    logger.error("order_creation_failed", "Failed to place customer order", error);
     return Response.json(
       { error: "Failed to place order. " + error.message },
       { status: 500 }

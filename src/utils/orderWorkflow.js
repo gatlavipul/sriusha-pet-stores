@@ -211,3 +211,4 @@ export function getStatusBadgeClass(status) {
  * All valid primary statuses list
  */
 export const ALL_ORDER_STATUSES = Object.values(ORDER_STATUS);
+
