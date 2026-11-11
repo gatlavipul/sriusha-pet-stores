@@ -443,13 +443,30 @@ export function Layout({ children }: { children: ReactNode }) {
         <script type="module" src="/src/__create/dev-error-overlay.js"></script>
         <link rel="icon" href="/src/__create/favicon.png" />
         {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
-          <script
-            async
-            crossOrigin="anonymous"
-            data-clerk-publishable-key={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-            src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
-            type="text/javascript"
-          />
+          <>
+            <script
+              async
+              crossOrigin="anonymous"
+              data-clerk-publishable-key={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+              src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+              type="text/javascript"
+            />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
+                  window.addEventListener('load', async function () {
+                    if (window.Clerk && !window.Clerk.isReady) {
+                      try {
+                        await window.Clerk.load();
+                      } catch (e) {
+                        console.warn('[Clerk] Load warning:', e);
+                      }
+                    }
+                  });
+                `,
+              }}
+            />
+          </>
         ) : null}
         {LoadFontsSSR ? <LoadFontsSSR /> : null}
       </head>
