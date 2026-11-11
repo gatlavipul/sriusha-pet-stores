@@ -188,6 +188,29 @@ export default function SignInPage() {
           className="rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs"
         >
           <div className="space-y-4">
+            {typeof window !== "undefined" && window.Clerk && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.Clerk?.openSignIn) {
+                      window.Clerk.openSignIn({
+                        afterSignInUrl: "/account",
+                      });
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-xs sm:text-sm font-semibold text-gray-700 shadow-xs hover:bg-gray-50 transition-all mb-4"
+                >
+                  <Shield size={15} className="text-[#2563EB]" />
+                  <span>Sign In with Clerk SSO</span>
+                </button>
+                <div className="flex items-center gap-3 my-3">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-[11px] font-medium text-gray-400">OR USE CREDENTIALS</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 Email Address
