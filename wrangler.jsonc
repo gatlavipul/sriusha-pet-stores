@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sriusha-vet-pet-stores",
+  "main": "./functions/worker.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./build/client",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "sriusha-product-images"
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production",
+    "APP_URL": "https://sriushastores.in"
+  }
+}

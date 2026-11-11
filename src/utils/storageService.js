@@ -1,13 +1,14 @@
 /**
  * Sri Usha Vet & Pet Stores - Production Cloud Image Storage Service
- * Provides an abstraction layer over cloud providers (Vercel Blob, S3/R2)
+ * Provides an abstraction layer over Cloudflare R2 (primary) and Vercel Blob,
  * with a secure local filesystem fallback for development.
+ * 100% compatible with Cloudflare Workers runtime and Node.js.
  */
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { put } from "@vercel/blob";
 import logger from "./logger.js";
+import { isR2Configured, uploadToR2 } from "./r2Client.js";
 
 export const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -63,7 +64,7 @@ export function validateImageFile(file) {
 }
 
 /**
- * Generates a collision-resistant, path-traversal-safe filename
+ * Generates a collision-resistant, path-traversal-safe filename & object key
  */
 export function generateSafeFilename(originalName) {
   const rawExt = path.extname(originalName || "").toLowerCase() || ".png";
@@ -71,10 +72,11 @@ export function generateSafeFilename(originalName) {
 
   // Prevent path traversal by isolating the basename
   const isolatedBase = path.basename(originalName || "image", rawExt);
-  const sanitizedBase = isolatedBase
-    .replace(/[^a-zA-Z0-9_\-]/g, "_")
-    .substring(0, 40)
-    .replace(/^_+|_+$/g, "") || "item";
+  const sanitizedBase =
+    isolatedBase
+      .replace(/[^a-zA-Z0-9_\-]/g, "_")
+      .substring(0, 40)
+      .replace(/^_+|_+$/g, "") || "item";
 
   const randomSuffix = crypto.randomBytes(4).toString("hex");
   const timestamp = Date.now();
@@ -83,7 +85,7 @@ export function generateSafeFilename(originalName) {
 }
 
 /**
- * Uploads an image file to the configured storage driver
+ * Uploads an image file to the configured storage driver (Cloudflare R2, Blob, or Local fallback)
  */
 export async function uploadImage(file, options = {}) {
   // 1. Validation check
@@ -96,13 +98,49 @@ export async function uploadImage(file, options = {}) {
   const folder = options.folder || "uploads";
   const targetKey = `${folder}/${safeFilename}`;
 
-  // 2. Provider: Vercel Blob
+  const arrayBuffer = await file.arrayBuffer();
+
+  // 2. Primary Provider: Cloudflare R2
+  if (isR2Configured() || (options.env && options.env.R2_BUCKET)) {
+    try {
+      const r2Result = await uploadToR2({
+        key: targetKey,
+        data: arrayBuffer,
+        contentType: file.type,
+        env: options.env || null,
+      });
+
+      logger.info("r2_image_uploaded", `Uploaded image to Cloudflare R2: ${r2Result.url}`, {
+        filename: safeFilename,
+        key: targetKey,
+        size: file.size,
+        type: file.type,
+      });
+
+      return {
+        url: r2Result.url,
+        key: targetKey,
+        filename: safeFilename,
+        size: file.size,
+        type: file.type,
+        provider: "cloudflare_r2",
+      };
+    } catch (err) {
+      logger.error("r2_upload_error", "Failed to upload to Cloudflare R2", err);
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Cloudflare R2 storage service is currently unavailable.");
+      }
+    }
+  }
+
+  // 3. Secondary Cloud Provider: Vercel Blob (if configured)
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (blobToken && blobToken.trim() !== "" && blobToken !== "your_vercel_blob_read_write_token") {
     try {
+      const { put } = await import("@vercel/blob");
       const blob = await put(targetKey, file, {
         access: "public",
-        addRandomSuffix: false, // We already use cryptographically random safe filenames
+        addRandomSuffix: false,
       });
 
       logger.info("cloud_image_uploaded", `Uploaded image to Vercel Blob: ${blob.url}`, {
@@ -113,21 +151,21 @@ export async function uploadImage(file, options = {}) {
 
       return {
         url: blob.url,
+        key: targetKey,
         filename: safeFilename,
         size: file.size,
         type: file.type,
         provider: "vercel_blob",
       };
     } catch (err) {
-      logger.error("vercel_blob_upload_error", "Failed to upload to Vercel Blob, evaluating fallback", err);
-      // If Vercel Blob fails, proceed to local fallback if in development
+      logger.error("vercel_blob_upload_error", "Failed to upload to Vercel Blob", err);
       if (process.env.NODE_ENV === "production") {
         throw new Error("Cloud image storage service is currently unavailable.");
       }
     }
   }
 
-  // 3. Fallback: Local Filesystem Storage (public/uploads)
+  // 4. Safe Local Development Fallback
   try {
     const uploadsDir = path.join(process.cwd(), "public", folder);
     if (!fs.existsSync(uploadsDir)) {
@@ -135,7 +173,6 @@ export async function uploadImage(file, options = {}) {
     }
 
     const filePath = path.join(uploadsDir, safeFilename);
-    const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     fs.writeFileSync(filePath, buffer);
 
@@ -148,14 +185,15 @@ export async function uploadImage(file, options = {}) {
 
     return {
       url: publicUrl,
+      key: targetKey,
       filename: safeFilename,
       size: file.size,
       type: file.type,
       provider: "local",
     };
   } catch (err) {
-    logger.error("local_image_upload_error", "Failed to save image to local filesystem", err);
-    throw new Error("Failed to store image on server: " + err.message);
+    logger.error("local_image_upload_error", "Failed to save image to local storage", err);
+    throw new Error("Failed to store image: " + err.message);
   }
 }
 
@@ -167,4 +205,3 @@ export default {
   ALLOWED_IMAGE_TYPES,
   ALLOWED_EXTENSIONS,
 };
-

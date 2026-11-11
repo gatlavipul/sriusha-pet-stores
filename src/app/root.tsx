@@ -442,6 +442,15 @@ export function Layout({ children }: { children: ReactNode }) {
         <Links />
         <script type="module" src="/src/__create/dev-error-overlay.js"></script>
         <link rel="icon" href="/src/__create/favicon.png" />
+        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+          <script
+            async
+            crossOrigin="anonymous"
+            data-clerk-publishable-key={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+            src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+            type="text/javascript"
+          />
+        ) : null}
         {LoadFontsSSR ? <LoadFontsSSR /> : null}
       </head>
       <body>

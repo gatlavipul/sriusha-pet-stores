@@ -15,10 +15,11 @@ export async function requireAdmin() {
       return { error: "Authentication required", status: 401 };
     }
 
+    const userId = parseInt(session.user.id, 10);
     const rows = await sql`
-      SELECT id, name, email, role 
+      SELECT id, name, email, role, clerk_user_id 
       FROM auth_users 
-      WHERE id = ${session.user.id} 
+      WHERE id = ${userId} 
       LIMIT 1
     `;
 
@@ -43,10 +44,11 @@ export async function requireDeliveryPartner() {
       return { error: "Authentication required", status: 401 };
     }
 
+    const userId = parseInt(session.user.id, 10);
     const rows = await sql`
-      SELECT id, name, email, role 
+      SELECT id, name, email, role, clerk_user_id 
       FROM auth_users 
-      WHERE id = ${session.user.id} 
+      WHERE id = ${userId} 
       LIMIT 1
     `;
 
@@ -71,10 +73,11 @@ export async function requireRole(allowedRoles = []) {
       return { error: "Authentication required", status: 401 };
     }
 
+    const userId = parseInt(session.user.id, 10);
     const rows = await sql`
-      SELECT id, name, email, role 
+      SELECT id, name, email, role, clerk_user_id 
       FROM auth_users 
-      WHERE id = ${session.user.id} 
+      WHERE id = ${userId} 
       LIMIT 1
     `;
 
@@ -106,10 +109,11 @@ export async function requireUser() {
       return { error: "Authentication required", status: 401 };
     }
 
+    const userId = parseInt(session.user.id, 10);
     const rows = await sql`
-      SELECT id, name, email, role 
+      SELECT id, name, email, role, clerk_user_id 
       FROM auth_users 
-      WHERE id = ${session.user.id} 
+      WHERE id = ${userId} 
       LIMIT 1
     `;
 

@@ -13,10 +13,11 @@ export async function GET() {
       });
     }
 
+    const userId = parseInt(session.user.id, 10);
     const users = await sql`
-      SELECT id, role, email, name 
+      SELECT id, role, email, name, clerk_user_id 
       FROM auth_users 
-      WHERE id = ${session.user.id} 
+      WHERE id = ${userId} 
       LIMIT 1
     `;
 
@@ -37,6 +38,7 @@ export async function GET() {
       role,
       email: users[0].email,
       name: users[0].name,
+      clerkUserId: users[0].clerk_user_id || null,
     });
   } catch (error) {
     console.error("Error checking role:", error);

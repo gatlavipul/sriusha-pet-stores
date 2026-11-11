@@ -36,3 +36,8 @@ pnpm-debug.log*
 # Platform / Deployments
 .vercel
 .netlify
+.wrangler
+
+# Uploads
+/public/uploads/
+/public/products/

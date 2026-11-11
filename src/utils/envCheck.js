@@ -1,12 +1,12 @@
 /**
  * Sri Usha Vet & Pet Stores - Production Environment Validator
  * Ensures all required environment variables are set without leaking secrets.
+ * Validates Neon, Clerk, Cloudflare R2, Resend, and Razorpay configurations.
  */
 import logger from "./logger.js";
 
 const REQUIRED_IN_PRODUCTION = [
   "DATABASE_URL",
-  "AUTH_SECRET",
 ];
 
 export function validateEnvironment() {
@@ -29,18 +29,43 @@ export function validateEnvironment() {
     }
   }
 
-  // Check optional production integrations
+  // Diagnostics summary for target cloud architecture
   const diagnostics = {
     databaseConfigured: Boolean(process.env.DATABASE_URL),
-    authConfigured: Boolean(process.env.AUTH_SECRET),
-    razorpayConfigured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
-    blobStorageConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN !== "your_vercel_blob_read_write_token"),
-    emailConfigured: Boolean(process.env.SENDGRID_API_KEY || process.env.EMAIL_PROVIDER),
-    smsConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID || process.env.SMS_PROVIDER),
+    authConfigured: Boolean(process.env.AUTH_SECRET || process.env.CLERK_SECRET_KEY),
+    clerkAuth: Boolean(
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+      process.env.CLERK_SECRET_KEY &&
+      !process.env.CLERK_SECRET_KEY.includes("placeholder")
+    ),
+    cloudflareR2: Boolean(
+      process.env.R2_ACCOUNT_ID &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY &&
+      process.env.R2_BUCKET_NAME &&
+      !process.env.R2_ACCOUNT_ID.includes("placeholder")
+    ),
+    resendEmail: Boolean(
+      process.env.RESEND_API_KEY &&
+      !process.env.RESEND_API_KEY.includes("placeholder")
+    ),
+    razorpay: Boolean(
+      process.env.RAZORPAY_KEY_ID &&
+      process.env.RAZORPAY_KEY_SECRET &&
+      !process.env.RAZORPAY_KEY_ID.includes("placeholder")
+    ),
+    razorpayConfigured: Boolean(
+      process.env.RAZORPAY_KEY_ID &&
+      process.env.RAZORPAY_KEY_SECRET &&
+      !process.env.RAZORPAY_KEY_ID.includes("placeholder")
+    ),
+    blobStorageConfigured: Boolean(
+      (process.env.R2_ACCOUNT_ID && !process.env.R2_ACCOUNT_ID.includes("placeholder")) ||
+      (process.env.BLOB_READ_WRITE_TOKEN && process.env.BLOB_READ_WRITE_TOKEN !== "your_vercel_blob_read_write_token")
+    ),
   };
 
   return diagnostics;
 }
 
 export default validateEnvironment;
-

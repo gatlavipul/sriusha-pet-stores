@@ -1,9 +1,11 @@
 import sql from "../app/api/utils/sql.js";
 import logger from "./logger.js";
+import { sendEmail, sendWelcomeEmail, isResendConfigured } from "./resendService.js";
 
 /**
  * Sri Usha Notification Architecture
- * Handles admin operational alerts and customer communications (Email, SMS, WhatsApp).
+ * Handles admin operational alerts and customer communications (Resend Email, SMS, WhatsApp).
+ * Runs seamlessly on Cloudflare Workers and Node.js.
  */
 
 export const NOTIFICATION_TYPES = {
@@ -18,6 +20,7 @@ export const NOTIFICATION_TYPES = {
   ORDER_CANCELLED: "order_cancelled",
   LOW_STOCK: "low_stock",
   PAYMENT_ISSUE: "payment_issue",
+  WELCOME: "welcome",
 };
 
 /**
@@ -80,19 +83,20 @@ export async function notifyAdmin(param1, param2, param3, param4) {
 }
 
 /**
- * Records and dispatches customer order notifications across Email, SMS, or WhatsApp
+ * Records and dispatches customer order notifications across Email (Resend), SMS, or WhatsApp
  */
 export async function notifyCustomer({
   userId = null,
-  orderId,
+  orderId = null,
   channel = "email",
   recipient,
   templateType,
   title,
   content,
+  htmlContent = null,
 }) {
   try {
-    if (!orderId || !recipient || !title || !content) {
+    if (!recipient || !title || !content) {
       logger.warn("notify_customer_invalid_args", "Missing required fields for customer notification", {
         orderId,
         recipient,
@@ -100,20 +104,31 @@ export async function notifyCustomer({
       return null;
     }
 
-    // Determine dispatch status based on whether live credentials exist
     let dispatchStatus = "logged";
-    const hasEmailProvider = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER);
-    const hasSmsProvider = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
-    const hasWhatsAppProvider = Boolean(process.env.WHATSAPP_API_TOKEN);
 
-    if (channel === "email" && hasEmailProvider) {
-      // Future live email provider trigger
+    // 1. Transactional Email via Resend
+    if (channel === "email") {
+      const emailRes = await sendEmail({
+        to: recipient,
+        subject: title,
+        html:
+          htmlContent ||
+          `<div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
+             <h2 style="color: #059669;">${title}</h2>
+             <p>${content}</p>
+             <p style="margin-top: 24px; font-size: 13px; color: #64748b;">Sri Usha Vet & Pet Stores, Uppal, Hyderabad</p>
+           </div>`,
+        text: content,
+      });
+
+      if (emailRes.mode === "sent") {
+        dispatchStatus = "sent";
+      } else {
+        dispatchStatus = "logged";
+      }
+    } else if (channel === "sms" && Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)) {
       dispatchStatus = "queued";
-    } else if (channel === "sms" && hasSmsProvider) {
-      // Future live SMS provider trigger
-      dispatchStatus = "queued";
-    } else if (channel === "whatsapp" && hasWhatsAppProvider) {
-      // Future WhatsApp Business API trigger
+    } else if (channel === "whatsapp" && Boolean(process.env.WHATSAPP_API_TOKEN)) {
       dispatchStatus = "queued";
     }
 
@@ -145,6 +160,35 @@ export async function notifyCustomer({
 }
 
 /**
+ * Sends customer account welcome email and logs customer notification
+ */
+export async function triggerWelcomeNotification(user) {
+  if (!user || !user.email) return;
+
+  const emailRes = await sendWelcomeEmail({
+    to: user.email,
+    name: user.name,
+  });
+
+  const status = emailRes.mode === "sent" ? "sent" : "logged";
+
+  try {
+    await sql`
+      INSERT INTO customer_notifications (
+        user_id, order_id, channel, recipient, template_type, title, content, status, created_at
+      ) VALUES (
+        ${user.id || null}, NULL, 'email', ${user.email}, 'welcome',
+        'Welcome to Sri Usha Vet & Pet Stores! 🐾',
+        ${`Welcome ${user.name || "Customer"}! Your account at Sri Usha Vet & Pet Stores is ready.`},
+        ${status}, NOW()
+      )
+    `;
+  } catch (e) {
+    logger.error("welcome_notification_record_failed", "Could not log welcome notification", e);
+  }
+}
+
+/**
  * High-level orchestration for order lifecycle notifications
  */
 export async function triggerOrderNotifications(eventType, order, extra = {}) {
@@ -166,7 +210,7 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
         linkUrl: `/admin/orders`,
       });
 
-      // 2. Customer Email
+      // 2. Customer Email via Resend
       if (customerEmail) {
         await notifyCustomer({
           userId: order.user_id,
@@ -211,6 +255,73 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           templateType: "order_confirmed",
           title: `Order Confirmed: ${orderNum}`,
           content: `Good news! Your order ${orderNum} has been confirmed by Sri Usha Vet & Pet Stores.`,
+        });
+      }
+      break;
+    }
+
+    case NOTIFICATION_TYPES.ORDER_PACKING: {
+      await notifyAdmin({
+        type: NOTIFICATION_TYPES.ORDER_PACKING,
+        title: `Order Packing (${orderNum})`,
+        message: `Order ${orderNum} is being packed at the store.`,
+        orderId: order.id,
+      });
+
+      if (customerEmail) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "email",
+          recipient: customerEmail,
+          templateType: "order_packing",
+          title: `Packing Your Order: ${orderNum}`,
+          content: `Your items are now being carefully packed with tamper-proof seal at our Uppal store.`,
+        });
+      }
+      break;
+    }
+
+    case NOTIFICATION_TYPES.ORDER_READY: {
+      await notifyAdmin({
+        type: NOTIFICATION_TYPES.ORDER_READY,
+        title: `Order Ready For Delivery (${orderNum})`,
+        message: `Order ${orderNum} packed and staged at dispatch counter.`,
+        orderId: order.id,
+      });
+
+      if (customerEmail) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "email",
+          recipient: customerEmail,
+          templateType: "order_ready",
+          title: `Order Ready: ${orderNum}`,
+          content: `Your order is packed and ready for dispatch. A delivery partner will be assigned shortly.`,
+        });
+      }
+      break;
+    }
+
+    case NOTIFICATION_TYPES.ORDER_ASSIGNED: {
+      const driverName = extra.driverName || "Delivery Partner";
+      await notifyAdmin({
+        type: NOTIFICATION_TYPES.ORDER_ASSIGNED,
+        title: `Order Assigned (${orderNum})`,
+        message: `Order ${orderNum} assigned to driver ${driverName}.`,
+        orderId: order.id,
+      });
+
+      if (customerEmail) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "email",
+          recipient: customerEmail,
+          templateType: "order_assigned",
+          title: `Delivery Partner Assigned: ${orderNum}`,
+          content: `${driverName} has been assigned to deliver your order.`,
         });
       }
       break;
@@ -275,7 +386,6 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
 
     case NOTIFICATION_TYPES.DELIVERY_FAILED: {
       const reason = extra.failureReason || order.delivery_failure_reason || "Customer unavailable";
-      // High-priority admin alert
       await notifyAdmin({
         type: NOTIFICATION_TYPES.DELIVERY_FAILED,
         title: `🚨 Delivery Exception: ${orderNum}`,
@@ -293,6 +403,29 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           templateType: "delivery_failed",
           title: `Delivery Attempt Unsuccessful: ${orderNum}`,
           content: `We were unable to complete delivery (${reason}). Our support team will reach out to reschedule.`,
+        });
+      }
+      break;
+    }
+
+    case NOTIFICATION_TYPES.ORDER_CANCELLED: {
+      const reason = extra.reason || order.cancellation_reason || "Requested by customer or store";
+      await notifyAdmin({
+        type: NOTIFICATION_TYPES.ORDER_CANCELLED,
+        title: `Order Cancelled (${orderNum})`,
+        message: `Order ${orderNum} has been cancelled: "${reason}". Inventory restored.`,
+        orderId: order.id,
+      });
+
+      if (customerEmail) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "email",
+          recipient: customerEmail,
+          templateType: "order_cancelled",
+          title: `Order Cancelled: ${orderNum}`,
+          content: `Your order ${orderNum} has been cancelled (${reason}). If prepaid, refund will process within 5-7 working days.`,
         });
       }
       break;
@@ -319,7 +452,6 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
  */
 export async function checkAndTriggerLowStock(productId, currentStock, productName) {
   if (currentStock <= 5) {
-    // Check if an unread or recent alert was already created in the last 24 hours
     const recent = await sql`
       SELECT id FROM admin_notifications 
       WHERE product_id = ${productId} 
@@ -328,7 +460,7 @@ export async function checkAndTriggerLowStock(productId, currentStock, productNa
       LIMIT 1
     `;
     if (recent.length > 0) {
-      return false; // Suppressed / already notified
+      return false;
     }
 
     const isCritical = currentStock === 0;
@@ -350,3 +482,12 @@ export async function checkAndTriggerLowStock(productId, currentStock, productNa
   return false;
 }
 
+export default {
+  NOTIFICATION_TYPES,
+  notifyAdmin,
+  notifyCustomer,
+  triggerOrderNotifications,
+  triggerWelcomeNotification,
+  checkAndTriggerLowStock,
+  isResendConfigured,
+};

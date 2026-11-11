@@ -43,15 +43,15 @@ app.use('*', async (c, next) => {
     );
   }
 
-  // Content-Security-Policy tailored for Sri Usha storefront & Razorpay integration
+  // Content-Security-Policy tailored for Sri Usha storefront, Clerk, Razorpay, and R2
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.clerk.accounts.dev https://*.clerk.com https://kit.fontawesome.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://ka-f.fontawesome.com",
+    "font-src 'self' https://fonts.gstatic.com https://ka-f.fontawesome.com data:",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https:",
-    "frame-src 'self' https://api.razorpay.com",
+    "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.clerk.accounts.dev https://api.clerk.com https://api.resend.com https://*.r2.cloudflarestorage.com https://ka-f.fontawesome.com https:",
+    "frame-src 'self' https://api.razorpay.com https://*.clerk.accounts.dev https://*.clerk.com",
   ].join('; ');
 
   c.res.headers.set('Content-Security-Policy', csp);
@@ -60,4 +60,5 @@ app.use('*', async (c, next) => {
 // Routes
 app.route(API_BASENAME, api);
 
+export { app };
 export default createHonoServer({ app });

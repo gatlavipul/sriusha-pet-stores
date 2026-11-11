@@ -8,10 +8,11 @@ export async function GET() {
       return Response.json({ authenticated: false, user: null });
     }
 
+    const userId = parseInt(session.user.id, 10);
     const rows = await sql`
-      SELECT id, name, email, role, created_at, image 
+      SELECT id, name, email, role, created_at, image, clerk_user_id 
       FROM auth_users 
-      WHERE id = ${session.user.id} 
+      WHERE id = ${userId} 
       LIMIT 1
     `;
 
@@ -29,6 +30,7 @@ export async function GET() {
         role: user.role || "customer",
         created_at: user.created_at,
         image: user.image,
+        clerkUserId: user.clerk_user_id || null,
       },
     });
   } catch (error) {
@@ -39,4 +41,3 @@ export async function GET() {
     );
   }
 }
-
