@@ -167,3 +167,4 @@ export default {
   ALLOWED_IMAGE_TYPES,
   ALLOWED_EXTENSIONS,
 };
+

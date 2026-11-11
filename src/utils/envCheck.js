@@ -43,3 +43,4 @@ export function validateEnvironment() {
 }
 
 export default validateEnvironment;
+
