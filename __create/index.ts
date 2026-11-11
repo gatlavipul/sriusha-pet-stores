@@ -47,11 +47,11 @@ app.use('*', async (c, next) => {
   const csp = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com https://kit.fontawesome.com https://cdn.jsdelivr.net",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://ka-f.fontawesome.com https://cdn.jsdelivr.net https://*.clerk.accounts.dev",
-    "font-src 'self' https://fonts.gstatic.com https://ka-f.fontawesome.com data:",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.fontawesome.com https://cdn.jsdelivr.net https://*.clerk.accounts.dev https://*.clerk.com",
+    "font-src 'self' https://fonts.gstatic.com https://*.fontawesome.com data:",
     "img-src 'self' data: blob: https:",
     "worker-src 'self' blob:",
-    "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.clerk.accounts.dev https://api.clerk.com https://challenges.cloudflare.com https://api.resend.com https://*.r2.cloudflarestorage.com https://ka-f.fontawesome.com https:",
+    "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com https://api.resend.com https://*.r2.cloudflarestorage.com https://*.fontawesome.com https:",
     "frame-src 'self' https://api.razorpay.com https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
   ].join('; ');
 

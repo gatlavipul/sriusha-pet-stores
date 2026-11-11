@@ -64,6 +64,14 @@ function getClerkHostedDomain() {
   }
 }
 
+function isClerkLoaded() {
+  return Boolean(
+    typeof window !== "undefined" &&
+      window.Clerk &&
+      (window.Clerk.loaded || window.Clerk.status === "ready")
+  );
+}
+
 export default function SignInPage() {
   const { data: session, status } = useSession();
   const [infoMessage, setInfoMessage] = useState(null);
@@ -75,7 +83,11 @@ export default function SignInPage() {
   const isMountedWidgetRef = useRef(false);
 
   const hostedDomain = getClerkHostedDomain();
-  const hostedSignInUrl = hostedDomain ? `https://${hostedDomain}/sign-in` : null;
+  const returnToOrigin =
+    typeof window !== "undefined" ? `${window.location.origin}/account/signin` : "";
+  const hostedSignInUrl = hostedDomain
+    ? `https://${hostedDomain}/sign-in${returnToOrigin ? `?redirect_url=${encodeURIComponent(returnToOrigin)}` : ""}`
+    : null;
 
   // Check for registration success notice
   useEffect(() => {
@@ -139,7 +151,7 @@ export default function SignInPage() {
     }
   }, [session?.user?.role]);
 
-  // Redirect immediately if already authenticated
+  // Redirect immediately if already authenticated via NextAuth session
   useEffect(() => {
     if (status === "authenticated" && session) {
       handlePostLoginRedirect();
@@ -158,13 +170,16 @@ export default function SignInPage() {
       if (!window.Clerk) return false;
 
       try {
-        if (!window.Clerk.isReady && typeof window.__initClerk === "function") {
+        if (!isClerkLoaded() && typeof window.__initClerk === "function") {
           await window.__initClerk();
-        } else if (!window.Clerk.isReady) {
-          await window.Clerk.load();
+        } else if (!isClerkLoaded()) {
+          await window.Clerk.load({
+            signInUrl: "/account/signin",
+            signUpUrl: "/account/signup",
+          });
         }
 
-        if (!window.Clerk.isReady) return false;
+        if (!isClerkLoaded()) return false;
 
         setClerkLoaded(true);
         setMountFallback(false);
@@ -176,7 +191,7 @@ export default function SignInPage() {
         }
 
         // Listen for completion of Clerk Sign-In
-        if (typeof window.Clerk.addListener === "function") {
+        if (!unsubscribeListener && typeof window.Clerk.addListener === "function") {
           unsubscribeListener = window.Clerk.addListener((resources) => {
             if (resources?.user && resources?.session) {
               handlePostLoginRedirect();
@@ -202,7 +217,7 @@ export default function SignInPage() {
           });
         }
 
-        return true;
+        return isMountedWidgetRef.current;
       } catch (err) {
         console.warn("[Clerk] Mount SignIn warning:", err);
         return false;
@@ -222,7 +237,7 @@ export default function SignInPage() {
         pollTimer = setInterval(async () => {
           attempts += 1;
           const ok = await mountClerkWidget();
-          if (ok || attempts >= 50) {
+          if (ok || attempts >= 60) {
             clearInterval(pollTimer);
           }
         }, 150);
@@ -231,7 +246,7 @@ export default function SignInPage() {
           if (!isMountedWidgetRef.current) {
             setMountFallback(true);
           }
-        }, 5000);
+        }, 8000);
       }
     });
 
@@ -257,12 +272,12 @@ export default function SignInPage() {
     };
   }, [handlePostLoginRedirect]);
 
-  if (status === "loading" || redirecting) {
+  if (redirecting) {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FDFDFD] p-4">
         <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
         <p className="text-xs font-semibold text-gray-600">
-          {redirecting ? "Verifying store access & redirecting..." : "Checking authentication..."}
+          Verifying store access &amp; redirecting...
         </p>
       </div>
     );
@@ -318,7 +333,7 @@ export default function SignInPage() {
           />
 
           {/* Hosted Clerk Fallback if third-party scripts are blocked */}
-          {mountFallback && hostedSignInUrl && (
+          {mountFallback && !clerkLoaded && hostedSignInUrl && (
             <div className="w-full rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs text-center space-y-4">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]">
                 <Shield size={24} />

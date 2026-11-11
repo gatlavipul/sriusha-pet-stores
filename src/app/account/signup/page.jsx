@@ -37,6 +37,14 @@ function getClerkHostedDomain() {
   }
 }
 
+function isClerkLoaded() {
+  return Boolean(
+    typeof window !== "undefined" &&
+      window.Clerk &&
+      (window.Clerk.loaded || window.Clerk.status === "ready")
+  );
+}
+
 export default function SignUpPage() {
   const { data: session, status } = useSession();
   const [clerkLoaded, setClerkLoaded] = useState(false);
@@ -47,7 +55,11 @@ export default function SignUpPage() {
   const isMountedWidgetRef = useRef(false);
 
   const hostedDomain = getClerkHostedDomain();
-  const hostedSignUpUrl = hostedDomain ? `https://${hostedDomain}/sign-up` : null;
+  const returnToOrigin =
+    typeof window !== "undefined" ? `${window.location.origin}/account` : "";
+  const hostedSignUpUrl = hostedDomain
+    ? `https://${hostedDomain}/sign-up${returnToOrigin ? `?redirect_url=${encodeURIComponent(returnToOrigin)}` : ""}`
+    : null;
 
   const handlePostSignupRedirect = useCallback(async () => {
     if (isRedirectingRef.current) return;
@@ -119,13 +131,16 @@ export default function SignUpPage() {
       if (!window.Clerk) return false;
 
       try {
-        if (!window.Clerk.isReady && typeof window.__initClerk === "function") {
+        if (!isClerkLoaded() && typeof window.__initClerk === "function") {
           await window.__initClerk();
-        } else if (!window.Clerk.isReady) {
-          await window.Clerk.load();
+        } else if (!isClerkLoaded()) {
+          await window.Clerk.load({
+            signInUrl: "/account/signin",
+            signUpUrl: "/account/signup",
+          });
         }
 
-        if (!window.Clerk.isReady) return false;
+        if (!isClerkLoaded()) return false;
 
         setClerkLoaded(true);
         setMountFallback(false);
@@ -135,7 +150,7 @@ export default function SignUpPage() {
           return true;
         }
 
-        if (typeof window.Clerk.addListener === "function") {
+        if (!unsubscribeListener && typeof window.Clerk.addListener === "function") {
           unsubscribeListener = window.Clerk.addListener((resources) => {
             if (resources?.user && resources?.session) {
               handlePostSignupRedirect();
@@ -160,7 +175,7 @@ export default function SignUpPage() {
           });
         }
 
-        return true;
+        return isMountedWidgetRef.current;
       } catch (err) {
         console.warn("[Clerk] Mount SignUp warning:", err);
         return false;
@@ -179,7 +194,7 @@ export default function SignUpPage() {
         pollTimer = setInterval(async () => {
           attempts += 1;
           const ok = await mountClerkWidget();
-          if (ok || attempts >= 50) {
+          if (ok || attempts >= 60) {
             clearInterval(pollTimer);
           }
         }, 150);
@@ -188,7 +203,7 @@ export default function SignUpPage() {
           if (!isMountedWidgetRef.current) {
             setMountFallback(true);
           }
-        }, 5000);
+        }, 8000);
       }
     });
 
@@ -214,12 +229,12 @@ export default function SignUpPage() {
     };
   }, [handlePostSignupRedirect]);
 
-  if (status === "loading" || redirecting) {
+  if (redirecting) {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FDFDFD] p-4">
         <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
         <p className="text-xs font-semibold text-gray-600">
-          {redirecting ? "Setting up your customer account..." : "Loading..."}
+          Setting up your customer account...
         </p>
       </div>
     );
@@ -264,7 +279,7 @@ export default function SignUpPage() {
             className="w-full flex justify-center"
           />
 
-          {mountFallback && hostedSignUpUrl && (
+          {mountFallback && !clerkLoaded && hostedSignUpUrl && (
             <div className="w-full rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs text-center space-y-4">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]">
                 <Shield size={24} />

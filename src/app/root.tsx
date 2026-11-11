@@ -491,13 +491,23 @@ export function Layout({ children }: { children: ReactNode }) {
             <script
               dangerouslySetInnerHTML={{
                 __html: `
+                  window.__isClerkLoaded = function () {
+                    return Boolean(window.Clerk && (window.Clerk.loaded || window.Clerk.status === 'ready'));
+                  };
                   window.__initClerk = async function () {
                     if (!window.Clerk) return null;
+                    if (window.__isClerkLoaded()) {
+                      window.__clerkReady = true;
+                      return window.Clerk;
+                    }
                     if (!window.__clerkInitPromise) {
                       window.__clerkInitPromise = (async function () {
                         try {
-                          if (!window.Clerk.isReady) {
-                            await window.Clerk.load();
+                          if (!window.__isClerkLoaded()) {
+                            await window.Clerk.load({
+                              signInUrl: '/account/signin',
+                              signUpUrl: '/account/signup',
+                            });
                           }
                           window.__clerkReady = true;
                           window.dispatchEvent(new CustomEvent('clerk:ready', { detail: window.Clerk }));

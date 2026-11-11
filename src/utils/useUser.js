@@ -1,22 +1,30 @@
 import * as React from 'react';
 import { useSession } from "@auth/create/react";
 
+function isClerkLoaded() {
+  return Boolean(
+    typeof window !== "undefined" &&
+      window.Clerk &&
+      (window.Clerk.loaded || window.Clerk.status === "ready")
+  );
+}
+
 const waitForClerkIfConfigured = async (maxWaitMs = 2500) => {
   if (typeof window === "undefined") return;
 
   const hasClerkScript = Boolean(
     document.querySelector('script[data-clerk-publishable-key]') ||
-    window.Clerk ||
-    typeof window.__initClerk === "function"
+      window.Clerk ||
+      typeof window.__initClerk === "function"
   );
 
   if (!hasClerkScript) return;
-  if (window.Clerk?.isReady) return;
+  if (isClerkLoaded()) return;
 
   if (window.Clerk && typeof window.__initClerk === "function") {
     try {
       await window.__initClerk();
-      if (window.Clerk?.isReady) return;
+      if (isClerkLoaded()) return;
     } catch {
       // continue to event wait
     }
@@ -36,11 +44,11 @@ const waitForClerkIfConfigured = async (maxWaitMs = 2500) => {
     window.addEventListener("clerk:ready", done);
 
     const poll = setInterval(() => {
-      if (window.Clerk?.isReady) {
+      if (isClerkLoaded()) {
         done();
       } else if (window.Clerk && typeof window.__initClerk === "function") {
         window.__initClerk().then(() => {
-          if (window.Clerk?.isReady) done();
+          if (isClerkLoaded()) done();
         });
       }
     }, 100);
@@ -75,8 +83,25 @@ const useUser = () => {
       if (res.ok) {
         const data = await res.json();
         if (data.authenticated && data.user) {
-          setUser(data.user);
-          return data.user;
+          let resolvedUser = data.user;
+          // Display-only profile enrichment from Clerk browser session if backend lacks CLERK_SECRET_KEY
+          if (
+            typeof window !== "undefined" &&
+            window.Clerk?.user &&
+            (!resolvedUser.email || resolvedUser.email.endsWith("@clerk.sriushastores.in"))
+          ) {
+            const cUser = window.Clerk.user;
+            const cEmail = cUser.primaryEmailAddress?.emailAddress || cUser.emailAddresses?.[0]?.emailAddress;
+            const cName = cUser.fullName || [cUser.firstName, cUser.lastName].filter(Boolean).join(" ");
+            resolvedUser = {
+              ...resolvedUser,
+              name: cName || resolvedUser.name,
+              email: cEmail || resolvedUser.email,
+              image: cUser.imageUrl || resolvedUser.image,
+            };
+          }
+          setUser(resolvedUser);
+          return resolvedUser;
         }
       }
       if (session?.user) {

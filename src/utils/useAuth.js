@@ -20,7 +20,12 @@ function useAuth() {
 
   const signInWithCredentials = useCallback(async (options) => {
     // 1. If Clerk JS is active and loaded on window, use Clerk sign in
-    if (typeof window !== "undefined" && window.Clerk && window.Clerk.isReady && window.Clerk.client?.signIn) {
+    if (
+      typeof window !== "undefined" &&
+      window.Clerk &&
+      (window.Clerk.loaded || window.Clerk.status === "ready") &&
+      window.Clerk.client?.signIn
+    ) {
       try {
         const clerkRes = await window.Clerk.client.signIn.create({
           identifier: options.email,
@@ -45,7 +50,12 @@ function useAuth() {
 
   const signUpWithCredentials = useCallback(async (options) => {
     // 1. If Clerk JS is active, use Clerk sign up
-    if (typeof window !== "undefined" && window.Clerk && window.Clerk.isReady && window.Clerk.client?.signUp) {
+    if (
+      typeof window !== "undefined" &&
+      window.Clerk &&
+      (window.Clerk.loaded || window.Clerk.status === "ready") &&
+      window.Clerk.client?.signUp
+    ) {
       try {
         const clerkSignUp = await window.Clerk.client.signUp.create({
           emailAddress: options.email,

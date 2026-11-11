@@ -47,8 +47,17 @@ export default function Header() {
     }
   }, [user]);
 
-  const handleDirectClerkSignIn = (e) => {
-    if (typeof window !== "undefined" && window.Clerk?.isReady && typeof window.Clerk.openSignIn === "function") {
+  const isClerkReady = () =>
+    typeof window !== "undefined" &&
+    Boolean(window.Clerk && (window.Clerk.loaded || window.Clerk.status === "ready"));
+
+  const handleDirectClerkSignIn = async (e) => {
+    if (typeof window === "undefined") return;
+    if (window.Clerk && !isClerkReady() && typeof window.__initClerk === "function") {
+      e.preventDefault();
+      await window.__initClerk();
+    }
+    if (isClerkReady() && typeof window.Clerk.openSignIn === "function") {
       e.preventDefault();
       window.Clerk.openSignIn({
         signUpUrl: "/account/signup",
@@ -57,8 +66,13 @@ export default function Header() {
     }
   };
 
-  const handleDirectClerkSignUp = (e) => {
-    if (typeof window !== "undefined" && window.Clerk?.isReady && typeof window.Clerk.openSignUp === "function") {
+  const handleDirectClerkSignUp = async (e) => {
+    if (typeof window === "undefined") return;
+    if (window.Clerk && !isClerkReady() && typeof window.__initClerk === "function") {
+      e.preventDefault();
+      await window.__initClerk();
+    }
+    if (isClerkReady() && typeof window.Clerk.openSignUp === "function") {
       e.preventDefault();
       window.Clerk.openSignUp({
         signInUrl: "/account/signin",
