@@ -195,6 +195,12 @@ export async function POST(request) {
       `;
     }
 
+    // 7.5. Record initial timeline in order_status_history
+    await sql`
+      INSERT INTO order_status_history (order_id, status, changed_by_user_id, changed_by_role, notes)
+      VALUES (${order.id}, 'confirmed', ${userId}, 'customer', 'Payment verified via Razorpay online gateway')
+    `;
+
     // 8. Clear DB cart if logged in
     if (session?.user?.id) {
       await sql`DELETE FROM cart_items WHERE user_id = ${session.user.id}`;

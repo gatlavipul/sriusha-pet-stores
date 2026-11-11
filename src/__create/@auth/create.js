@@ -24,10 +24,11 @@ export default function CreateAuth(config) {
 			if (token) {
 				return {
 					user: {
-						id: token.sub,
+						id: token.id || token.sub,
 						email: token.email,
 						name: token.name,
 						image: token.picture,
+						role: token.role || 'customer',
 					},
 					expires: token.exp ? token.exp.toString() : '',
 				};

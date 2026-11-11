@@ -10,12 +10,20 @@ export async function GET(request, { params }) {
 
     let orders;
     if (session?.user?.id) {
-      // Check if user is admin or owner
-      const userCheck = await sql`SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1`;
-      const isAdmin = userCheck[0]?.role === "admin";
+      // Check user role from database
+      const userCheck = await sql`
+        SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1
+      `;
+      const role = userCheck[0]?.role || "customer";
 
-      if (isAdmin) {
+      if (role === "admin") {
         orders = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      } else if (role === "delivery_partner") {
+        orders = await sql`
+          SELECT * FROM orders 
+          WHERE id = ${id} AND assigned_delivery_partner_id = ${session.user.id}
+          LIMIT 1
+        `;
       } else {
         orders = await sql`
           SELECT * FROM orders 
@@ -49,11 +57,20 @@ export async function GET(request, { params }) {
       WHERE order_id = ${id}
     `;
 
+    // Fetch public order status timeline
+    const history = await sql`
+      SELECT h.id, h.status, h.changed_by_role, h.notes, h.created_at
+      FROM order_status_history h
+      WHERE h.order_id = ${id}
+      ORDER BY h.created_at ASC
+    `;
+
     return Response.json({
       order: {
         ...order,
         order_number: order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`,
         items,
+        history,
       },
     });
   } catch (error) {

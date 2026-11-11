@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return Response.json({ addresses: [] });
+      return Response.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
     }
 
     const addresses = await sql`

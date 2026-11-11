@@ -2,6 +2,8 @@ import sql from "@/app/api/utils/sql";
 import { requireAdmin, validateEmail, sanitizeText } from "@/app/api/utils/security";
 import bcrypt from "bcryptjs";
 
+const VALID_ROLES = ["admin", "delivery_partner", "customer"];
+
 export async function GET() {
   try {
     const authResult = await requireAdmin();
@@ -59,10 +61,17 @@ export async function POST(request) {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const cleanRole = role === "admin" ? "admin" : "customer";
+    const cleanRole = String(role).toLowerCase().trim();
+
+    if (!VALID_ROLES.includes(cleanRole)) {
+      return Response.json(
+        { error: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` },
+        { status: 400 }
+      );
+    }
 
     // Check if user already exists
-    const existing = await sql`SELECT id FROM auth_users WHERE email = ${cleanEmail} LIMIT 1`;
+    const existing = await sql`SELECT id FROM auth_users WHERE LOWER(email) = ${cleanEmail} LIMIT 1`;
     if (existing.length > 0) {
       return Response.json(
         { error: "A user with this email address already exists" },
@@ -70,10 +79,10 @@ export async function POST(request) {
       );
     }
 
-    // Create new user
+    // Create new staff / delivery / customer account
     const newUsers = await sql`
-      INSERT INTO auth_users (email, name, role, "emailVerified")
-      VALUES (${cleanEmail}, ${name ? sanitizeText(name, 100) : null}, ${cleanRole}, NULL)
+      INSERT INTO auth_users (email, name, role, created_at)
+      VALUES (${cleanEmail}, ${name ? sanitizeText(name, 100) : null}, ${cleanRole}, NOW())
       RETURNING id, email, name, role
     `;
 
@@ -87,6 +96,17 @@ export async function POST(request) {
       )
       VALUES (
         ${newUser.id}, 'credentials', 'credentials', ${newUser.id}, ${hashedPassword}
+      )
+    `;
+
+    // Audit log: role creation without logging password or secrets
+    await sql`
+      INSERT INTO admin_audit_logs (admin_id, action, target_user_id, details)
+      VALUES (
+        ${authResult.user.id},
+        'create_user',
+        ${newUser.id},
+        ${JSON.stringify({ role: cleanRole, email: cleanEmail })}::jsonb
       )
     `;
 

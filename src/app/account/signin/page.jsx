@@ -1,25 +1,149 @@
 import { useState, useEffect } from "react";
 import useAuth from "@/utils/useAuth";
 import { useSession } from "@auth/create/react";
-import { Lock, ArrowRight } from "lucide-react";
+import { Lock, ArrowRight, Shield, CheckCircle, AlertCircle } from "lucide-react";
+import { getLocalCart } from "@/utils/useCart";
+
+function resolveSafeRedirect(rawCallbackUrl, role) {
+  const roleDefaults = {
+    admin: "/admin",
+    delivery_partner: "/delivery",
+    customer: "/account",
+  };
+  const fallback = roleDefaults[role] || "/";
+
+  if (!rawCallbackUrl || typeof rawCallbackUrl !== "string") {
+    return fallback;
+  }
+
+  const url = rawCallbackUrl.trim();
+
+  // Validate internal path safety (prevent open redirect attacks)
+  if (
+    !url.startsWith("/") ||
+    url.startsWith("//") ||
+    url.includes("\\") ||
+    url.includes(":")
+  ) {
+    return fallback;
+  }
+
+  // Prevent redirect loops back to auth pages
+  if (
+    url.startsWith("/account/signin") ||
+    url.startsWith("/account/signup") ||
+    url.startsWith("/account/logout") ||
+    url === "/"
+  ) {
+    return fallback;
+  }
+
+  // Role boundaries on redirect URL
+  if (url.startsWith("/admin") && role !== "admin") {
+    return fallback;
+  }
+  if (url.startsWith("/delivery") && role !== "delivery_partner") {
+    return fallback;
+  }
+
+  return url;
+}
 
 export default function SignInPage() {
   const { data: session, status } = useSession();
   const [error, setError] = useState(null);
+  const [infoMessage, setInfoMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const { signInWithCredentials } = useAuth();
 
-  // Redirect if already logged in
+  // Check for registration success notice
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("registered") === "true") {
+        setInfoMessage("Your customer account was created successfully! Please sign in to continue.");
+      }
+    }
+  }, []);
+
+  // Redirect if already authenticated
   useEffect(() => {
     if (status === "authenticated" && session) {
-      const params = new URLSearchParams(window.location.search);
-      const callbackUrl = params.get("callbackUrl") || "/";
-      window.location.href = callbackUrl;
+      handlePostLoginRedirect();
     }
   }, [status, session]);
+
+  const handlePostLoginRedirect = async () => {
+    try {
+      // 1. Fetch verified role directly from server database
+      const roleRes = await fetch("/api/admin/check-role");
+      const roleData = await roleRes.json();
+      const verifiedRole = roleData?.role || session?.user?.role || "customer";
+
+      // 2. Merge guest cart if items are saved in local storage
+      const localItems = getLocalCart();
+      if (localItems && localItems.length > 0) {
+        try {
+          await fetch("/api/cart/merge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: localItems }),
+          });
+        } catch (e) {
+          console.warn("Cart merge during signin warning:", e);
+        }
+      }
+
+      // 3. Resolve safe destination URL
+      const params = new URLSearchParams(window.location.search);
+      const rawCallbackUrl = params.get("callbackUrl");
+      const targetUrl = resolveSafeRedirect(rawCallbackUrl, verifiedRole);
+
+      window.location.href = targetUrl;
+    } catch (e) {
+      console.error("Redirect resolution error:", e);
+      window.location.href = "/";
+    }
+  };
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanEmail || !cleanPassword) {
+      setError("Please fill in both email and password.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await signInWithCredentials({
+        email: cleanEmail,
+        password: cleanPassword,
+        redirect: false,
+      });
+
+      if (res?.error) {
+        setError("Invalid email or password. Please verify your credentials and try again.");
+        setLoading(false);
+        return;
+      }
+
+      // On successful credentials authentication, perform cart merge and safe role routing
+      await handlePostLoginRedirect();
+    } catch (err) {
+      console.error("Sign in error:", err);
+      setError("Invalid email or password. Please check your credentials and try again.");
+      setLoading(false);
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -28,33 +152,6 @@ export default function SignInPage() {
       </div>
     );
   }
-
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    if (!email || !password) {
-      setError("Please fill in both email and password.");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const callbackUrl = params.get("callbackUrl") || "/";
-      await signInWithCredentials({
-        email: email.trim(),
-        password: password.trim(),
-        callbackUrl,
-        redirect: true,
-      });
-    } catch (err) {
-      setError("Invalid email or password. Please try again.");
-      setLoading(false);
-    }
-  };
-
 
   return (
     <div className="flex min-h-screen w-full flex-col justify-center bg-gradient-to-b from-gray-50 to-white p-4 sm:p-6">
@@ -72,9 +169,17 @@ export default function SignInPage() {
             Welcome to Sri Usha
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Sign in to access your orders, saved addresses &amp; pet care benefits
+            Sign in to access your orders, account details &amp; store portal
           </p>
         </div>
+
+        {/* Info Message (e.g. Registered) */}
+        {infoMessage && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-800 shadow-2xs">
+            <CheckCircle size={16} className="text-emerald-600 shrink-0" />
+            <span>{infoMessage}</span>
+          </div>
+        )}
 
         {/* Sign In Form */}
         <form
@@ -116,8 +221,9 @@ export default function SignInPage() {
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
-                {error}
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                <AlertCircle size={15} className="shrink-0 text-red-600" />
+                <span>{error}</span>
               </div>
             )}
 

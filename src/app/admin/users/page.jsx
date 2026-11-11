@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { Plus, Trash2, Shield, User } from "lucide-react";
+import { Plus, Trash2, Shield, User, Truck, Filter, CheckCircle } from "lucide-react";
 import useUser from "@/utils/useUser";
 
 export default function AdminUsersPage() {
@@ -8,6 +8,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [roleFilter, setRoleFilter] = useState("all");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -84,6 +85,9 @@ export default function AdminUsersPage() {
 
       if (response.ok) {
         fetchUsers();
+      } else {
+        const err = await response.json();
+        alert(err.error || "Failed to delete user");
       }
     } catch (error) {
       console.error("Error deleting user:", error);
@@ -100,45 +104,103 @@ export default function AdminUsersPage() {
 
       if (response.ok) {
         fetchUsers();
+      } else {
+        const err = await response.json();
+        alert(err.error || "Failed to update role");
       }
     } catch (error) {
       console.error("Error updating role:", error);
     }
   };
 
+  const filteredUsers = users.filter((u) => {
+    if (roleFilter === "admin") return u.role === "admin";
+    if (roleFilter === "delivery_partner") return u.role === "delivery_partner";
+    if (roleFilter === "customer") return u.role === "customer" || !u.role;
+    return true;
+  });
+
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <AdminHeader />
 
       <div className="mx-auto max-w-7xl p-6">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-[#111827]">
-              User Management
+              User &amp; Staff Management
             </h1>
             <p className="text-sm text-[#6B7280]">
-              Manage admin users and permissions
+              Manage administrators, delivery partners, and customer accounts
             </p>
           </div>
           <button
             onClick={() => setShowAddUser(!showAddUser)}
-            className="flex items-center gap-2 rounded-lg bg-[#2ECC71] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#27AE60]"
+            className="flex items-center gap-2 rounded-xl bg-[#2ECC71] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#27AE60] shadow-xs"
           >
             <Plus className="h-4 w-4" />
-            Add Admin User
+            <span>Create Staff / Partner</span>
+          </button>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="mb-4 flex flex-wrap gap-2 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setRoleFilter("all")}
+            className={`rounded-xl px-3.5 py-1.5 transition-all ${
+              roleFilter === "all"
+                ? "bg-[#111827] text-white shadow-xs"
+                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            All Users ({users.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter("admin")}
+            className={`rounded-xl px-3.5 py-1.5 transition-all ${
+              roleFilter === "admin"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Admins ({users.filter((u) => u.role === "admin").length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter("delivery_partner")}
+            className={`rounded-xl px-3.5 py-1.5 transition-all ${
+              roleFilter === "delivery_partner"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Delivery Partners ({users.filter((u) => u.role === "delivery_partner").length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter("customer")}
+            className={`rounded-xl px-3.5 py-1.5 transition-all ${
+              roleFilter === "customer"
+                ? "bg-[#2563EB] text-white shadow-xs"
+                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Customers ({users.filter((u) => u.role === "customer" || !u.role).length})
           </button>
         </div>
 
         {showAddUser && (
-          <div className="mb-6 rounded-xl border border-[#E5E7EB] bg-white p-6">
-            <h2 className="mb-4 text-lg font-semibold text-[#111827]">
-              Add New Admin User
+          <div className="mb-6 rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-xs">
+            <h2 className="mb-4 text-base font-bold text-[#111827]">
+              Create Staff or Partner Account
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-[#6B7280]">
-                    Email *
+                    Email Address *
                   </label>
                   <input
                     type="email"
@@ -147,13 +209,13 @@ export default function AdminUsersPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
-                    placeholder="admin@example.com"
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
+                    placeholder="staff@sriusha.com"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-[#6B7280]">
-                    Name
+                    Full Name
                   </label>
                   <input
                     type="text"
@@ -161,8 +223,8 @@ export default function AdminUsersPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
-                    placeholder="Full Name"
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
+                    placeholder="Staff Member Name"
                   />
                 </div>
                 <div>
@@ -176,37 +238,38 @@ export default function AdminUsersPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
-                    placeholder="Strong password"
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
+                    placeholder="Strong password (at least 6 chars)"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-[#6B7280]">
-                    Role *
+                    Role Assignment *
                   </label>
                   <select
                     value={formData.role}
                     onChange={(e) =>
                       setFormData({ ...formData, role: e.target.value })
                     }
-                    className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20 font-medium"
                   >
-                    <option value="admin">Admin</option>
-                    <option value="customer">Customer</option>
+                    <option value="admin">Administrator (Full Access)</option>
+                    <option value="delivery_partner">Delivery Partner (Logistics Portal)</option>
+                    <option value="customer">Customer (Store Buyer)</option>
                   </select>
                 </div>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#2ECC71] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#27AE60]"
+                  className="rounded-xl bg-[#2ECC71] px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#27AE60] shadow-xs"
                 >
-                  Create User
+                  Create Account
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddUser(false)}
-                  className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#111827] transition-colors hover:border-[#2ECC71] hover:text-[#2ECC71]"
+                  className="rounded-xl border border-[#E5E7EB] bg-white px-5 py-2.5 text-xs font-bold text-[#111827] transition-colors hover:bg-gray-50"
                 >
                   Cancel
                 </button>
@@ -215,117 +278,142 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        <div className="rounded-xl border border-[#E5E7EB] bg-white">
+        <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-[#E5E7EB]">
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#6B7280]">
+                <tr className="border-b border-[#E5E7EB] bg-gray-50/70">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase text-[#6B7280]">
                     User
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#6B7280]">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase text-[#6B7280]">
                     Contact Info
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#6B7280]">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase text-[#6B7280]">
                     Address
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#6B7280]">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase text-[#6B7280]">
                     Orders
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#6B7280]">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase text-[#6B7280]">
                     Total Spent
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-[#6B7280]">
+                  <th className="px-6 py-4 text-left text-xs font-bold uppercase text-[#6B7280]">
                     Role
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-[#6B7280]">
+                  <th className="px-6 py-4 text-right text-xs font-bold uppercase text-[#6B7280]">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#E5E7EB]">
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="5"
-                      className="px-6 py-8 text-center text-sm text-[#6B7280]"
+                      colSpan="7"
+                      className="px-6 py-12 text-center text-sm text-[#6B7280]"
                     >
-                      Loading...
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent mx-auto mb-2" />
+                      Loading users...
                     </td>
                   </tr>
-                ) : users.length === 0 ? (
+                ) : filteredUsers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="5"
-                      className="px-6 py-8 text-center text-sm text-[#6B7280]"
+                      colSpan="7"
+                      className="px-6 py-12 text-center text-sm text-[#6B7280]"
                     >
-                      No users found
+                      No users match the selected role filter.
                     </td>
                   </tr>
                 ) : (
-                  users.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="border-b border-[#E5E7EB] last:border-0"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F8F0]">
-                            {user.role === "admin" ? (
-                              <Shield className="h-5 w-5 text-[#27AE60]" />
-                            ) : (
-                              <User className="h-5 w-5 text-[#6B7280]" />
-                            )}
+                  filteredUsers.map((item) => {
+                    const isAdm = item.role === "admin";
+                    const isDel = item.role === "delivery_partner";
+
+                    return (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-gray-50/60 transition-colors"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                                isAdm
+                                  ? "bg-purple-100 text-purple-700"
+                                  : isDel
+                                  ? "bg-indigo-100 text-indigo-700"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {isAdm ? (
+                                <Shield className="h-5 w-5" />
+                              ) : isDel ? (
+                                <Truck className="h-5 w-5" />
+                              ) : (
+                                <User className="h-5 w-5" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-[#111827]">
+                                {item.name || "Customer"}
+                              </p>
+                              <p className="text-xs text-[#6B7280]">
+                                ID: #{item.id}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-[#111827]">
-                              {user.name || "No name"}
-                            </p>
-                            <p className="text-xs text-[#6B7280]">
-                              ID: {user.id}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-[#111827]">{user.email}</p>
-                        {user.phone && (
-                          <p className="text-xs text-[#6B7280]">{user.phone}</p>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="max-w-[200px] truncate text-xs text-[#6B7280]" title={user.address}>
-                          {user.address || "No address"}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[#111827]">
-                        {user.total_orders || 0} orders
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-[#2ECC71]">
-                        ₹{Number(user.total_spent || 0).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <select
-                          value={user.role}
-                          onChange={(e) =>
-                            handleRoleChange(user.id, e.target.value)
-                          }
-                          className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1 text-xs outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="customer">Customer</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => handleDelete(user.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-semibold text-[#111827]">{item.email}</p>
+                          {item.phone && (
+                            <p className="text-xs text-[#6B7280]">{item.phone}</p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="max-w-[200px] truncate text-xs text-[#6B7280]" title={item.address}>
+                            {item.address || "—"}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4 text-xs font-semibold text-[#111827]">
+                          {item.total_orders || 0} orders
+                        </td>
+                        <td className="px-6 py-4 text-xs font-bold text-[#2ECC71]">
+                          ₹{Number(item.total_spent || 0).toFixed(0)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <select
+                            value={item.role || "customer"}
+                            onChange={(e) =>
+                              handleRoleChange(item.id, e.target.value)
+                            }
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-bold outline-none ${
+                              isAdm
+                                ? "border-purple-200 bg-purple-50 text-purple-800"
+                                : isDel
+                                ? "border-indigo-200 bg-indigo-50 text-indigo-800"
+                                : "border-gray-200 bg-white text-gray-700"
+                            }`}
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="delivery_partner">Delivery Partner</option>
+                            <option value="customer">Customer</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(item.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50"
+                            title="Delete user"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

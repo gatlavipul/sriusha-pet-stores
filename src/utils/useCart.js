@@ -84,25 +84,40 @@ export default function useCart() {
     }
   }, []);
 
-  // When user signs in, sync any guest items with server cart
+  // When user signs in: merge guest cart atomically into database cart
   useEffect(() => {
     if (user) {
       const local = getLocalCart();
-      if (local.length > 0) {
-        Promise.all(
-          local.map((item) =>
-            fetch("/api/cart", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                product_id: item.product_id || item.id,
-                quantity: item.quantity,
-              }),
-            }).catch(() => {})
-          )
-        ).then(() => {
-          refreshCart();
-        });
+      // Check if there are local guest items to merge
+      const hasGuestItems = local.some((i) => typeof i.id === "string" && i.id.startsWith("local_"));
+      if (hasGuestItems && local.length > 0) {
+        fetch("/api/cart/merge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: local }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.cartItems) {
+              const merged = data.cartItems.map((ci) => ({
+                id: ci.id,
+                product_id: ci.product_id,
+                name: ci.name,
+                price: parseFloat(ci.price || 0),
+                image_url: ci.image_url,
+                quantity: ci.quantity,
+                stock_quantity: ci.stock_quantity ?? 99,
+              }));
+              setLocalCart(merged);
+              setItems(merged);
+            } else {
+              refreshCart();
+            }
+          })
+          .catch((err) => {
+            console.error("Cart merge error:", err);
+            refreshCart();
+          });
       }
     }
   }, [user, refreshCart]);
@@ -225,4 +240,3 @@ export default function useCart() {
     refreshCart,
   };
 }
-

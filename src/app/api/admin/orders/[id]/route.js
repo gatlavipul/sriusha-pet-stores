@@ -2,14 +2,18 @@ import sql from "@/app/api/utils/sql";
 import { requireAdmin, sanitizeText } from "@/app/api/utils/security";
 
 const VALID_STATUSES = [
-  "pending",
+  "placed",
   "confirmed",
-  "processing",
+  "packing",
   "packed",
-  "shipped",
+  "ready_for_delivery",
+  "assigned",
+  "out_for_delivery",
   "delivered",
   "cancelled",
   "returned",
+  "pending",
+  "processing",
 ];
 
 const VALID_PAYMENT_STATUSES = [
@@ -27,7 +31,17 @@ export async function GET(request, { params }) {
     }
 
     const { id } = params;
-    const orders = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+    const orders = await sql`
+      SELECT 
+        o.*,
+        dp.name as delivery_partner_name,
+        dp.email as delivery_partner_email
+      FROM orders o
+      LEFT JOIN auth_users dp ON o.assigned_delivery_partner_id = dp.id
+      WHERE o.id = ${id} 
+      LIMIT 1
+    `;
+
     if (orders.length === 0) {
       return Response.json({ error: "Order not found" }, { status: 404 });
     }
@@ -35,12 +49,31 @@ export async function GET(request, { params }) {
     const order = orders[0];
     const items = await sql`SELECT * FROM order_items WHERE order_id = ${id}`;
 
+    // Order status timeline history
+    const history = await sql`
+      SELECT h.*, u.name as changed_by_name
+      FROM order_status_history h
+      LEFT JOIN auth_users u ON u.id = h.changed_by_user_id
+      WHERE h.order_id = ${id}
+      ORDER BY h.created_at ASC
+    `;
+
+    // Available delivery partners for assignment
+    const deliveryPartners = await sql`
+      SELECT id, name, email 
+      FROM auth_users 
+      WHERE role = 'delivery_partner'
+      ORDER BY name ASC
+    `;
+
     return Response.json({
       order: {
         ...order,
         order_number: order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`,
         items,
+        history,
       },
+      deliveryPartners,
     });
   } catch (error) {
     console.error("Error fetching admin order:", error);
@@ -57,7 +90,13 @@ export async function PUT(request, { params }) {
 
     const { id } = params;
     const body = await request.json();
-    const { status, payment_status, cancellation_reason } = body;
+    const {
+      status,
+      payment_status,
+      cancellation_reason,
+      assigned_delivery_partner_id,
+      notes,
+    } = body;
 
     // Fetch existing order to check current state
     const existingOrders = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
@@ -70,9 +109,39 @@ export async function PUT(request, { params }) {
     const values = [];
     let paramIndex = 1;
 
+    let targetStatus = status;
+
+    // Assigning Delivery Partner
+    if (assigned_delivery_partner_id !== undefined) {
+      if (assigned_delivery_partner_id === null || assigned_delivery_partner_id === "") {
+        updates.push(`assigned_delivery_partner_id = NULL`);
+      } else {
+        const partnerCheck = await sql`
+          SELECT id, name, role FROM auth_users 
+          WHERE id = ${assigned_delivery_partner_id} AND role = 'delivery_partner'
+          LIMIT 1
+        `;
+        if (partnerCheck.length === 0) {
+          return Response.json(
+            { error: "Selected user is not an active delivery partner." },
+            { status: 400 }
+          );
+        }
+
+        updates.push(`assigned_delivery_partner_id = $${paramIndex}`);
+        values.push(assigned_delivery_partner_id);
+        paramIndex++;
+
+        // If assigning partner and no explicit status requested, set status to 'assigned'
+        if (!targetStatus && (currentOrder.status === "ready_for_delivery" || currentOrder.status === "packed" || currentOrder.status === "confirmed")) {
+          targetStatus = "assigned";
+        }
+      }
+    }
+
     // Validate and update status
-    if (status !== undefined) {
-      if (!VALID_STATUSES.includes(status)) {
+    if (targetStatus !== undefined) {
+      if (!VALID_STATUSES.includes(targetStatus)) {
         return Response.json(
           { error: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` },
           { status: 400 }
@@ -80,11 +149,11 @@ export async function PUT(request, { params }) {
       }
 
       updates.push(`status = $${paramIndex}`);
-      values.push(status);
+      values.push(targetStatus);
       paramIndex++;
 
       // Inventory restoration when cancelling
-      if (status === "cancelled" && currentOrder.status !== "cancelled") {
+      if (targetStatus === "cancelled" && currentOrder.status !== "cancelled") {
         updates.push(`cancelled_at = NOW()`);
         if (cancellation_reason) {
           updates.push(`cancellation_reason = $${paramIndex}`);
@@ -103,7 +172,7 @@ export async function PUT(request, { params }) {
             `;
           }
         }
-      } else if (currentOrder.status === "cancelled" && status !== "cancelled") {
+      } else if (currentOrder.status === "cancelled" && targetStatus !== "cancelled") {
         // Un-cancelling: re-decrement stock
         const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
         for (const item of items) {
@@ -140,6 +209,18 @@ export async function PUT(request, { params }) {
 
     const query = `UPDATE orders SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`;
     const updated = await sql(query, values);
+
+    // Record timeline in order_status_history if status changed or partner assigned
+    if (targetStatus && targetStatus !== currentOrder.status) {
+      const historyNotes = notes ? sanitizeText(notes, 255) : `Status updated to ${targetStatus} by administrator`;
+      await sql`
+        INSERT INTO order_status_history (
+          order_id, status, changed_by_user_id, changed_by_role, notes
+        ) VALUES (
+          ${id}, ${targetStatus}, ${authResult.user.id}, 'admin', ${historyNotes}
+        )
+      `;
+    }
 
     return Response.json({ success: true, order: updated[0] });
   } catch (error) {

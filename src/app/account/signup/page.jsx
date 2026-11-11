@@ -1,6 +1,24 @@
 import { useState } from "react";
 import useAuth from "@/utils/useAuth";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight, AlertCircle, CheckCircle } from "lucide-react";
+
+function getSafeCallback(raw) {
+  if (!raw || typeof raw !== "string") return "/account";
+  const url = raw.trim();
+  if (
+    !url.startsWith("/") ||
+    url.startsWith("//") ||
+    url.includes("\\") ||
+    url.includes(":") ||
+    url.startsWith("/account/signup") ||
+    url.startsWith("/account/signin") ||
+    url.startsWith("/admin") ||
+    url.startsWith("/delivery")
+  ) {
+    return "/account";
+  }
+  return url;
+}
 
 export default function SignUpPage() {
   const [error, setError] = useState(null);
@@ -9,37 +27,80 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
 
-  const { signUpWithCredentials } = useAuth();
+  const { signInWithCredentials } = useAuth();
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    if (!email || !password || !name) {
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanName || !cleanEmail || !cleanPassword) {
       setError("Please fill in all fields.");
       setLoading(false);
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password should be at least 6 characters.");
+    if (cleanName.length < 2) {
+      setError("Name must be at least 2 characters long.");
+      setLoading(false);
+      return;
+    }
+
+    if (cleanPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
       setLoading(false);
       return;
     }
 
     try {
-      const params = new URLSearchParams(window.location.search);
-      const callbackUrl = params.get("callbackUrl") || "/";
-      await signUpWithCredentials({
-        email: email.trim(),
-        password: password.trim(),
-        name: name.trim(),
-        callbackUrl,
-        redirect: true,
+      // Call dedicated Customer Signup API which strictly creates role = 'customer'
+      const response = await fetch("/api/account/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cleanName,
+          email: cleanEmail,
+          password: cleanPassword,
+        }),
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Failed to create account. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // Automatically sign in the newly registered customer
+      const params = new URLSearchParams(window.location.search);
+      const rawCallback = params.get("callbackUrl");
+      const safeCallback = getSafeCallback(rawCallback);
+
+      try {
+        const signinRes = await signInWithCredentials({
+          email: cleanEmail,
+          password: cleanPassword,
+          redirect: false,
+        });
+
+        if (signinRes?.error) {
+          // If auto sign-in was blocked, redirect to signin page with message
+          window.location.href = `/account/signin?registered=true&callbackUrl=${encodeURIComponent(safeCallback)}`;
+          return;
+        }
+
+        window.location.href = safeCallback;
+      } catch (authErr) {
+        window.location.href = `/account/signin?registered=true&callbackUrl=${encodeURIComponent(safeCallback)}`;
+      }
     } catch (err) {
-      setError("Failed to create account. If already registered, please sign in.");
+      console.error("Signup submission error:", err);
+      setError("Network or server error. Please try again later.");
       setLoading(false);
     }
   };
@@ -115,8 +176,9 @@ export default function SignUpPage() {
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
-                {error}
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                <AlertCircle size={15} className="shrink-0 text-red-600" />
+                <span>{error}</span>
               </div>
             )}
 

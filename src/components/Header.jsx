@@ -13,6 +13,7 @@ import {
   LogOut,
   Package,
   Heart,
+  Truck,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 import useCart from "@/utils/useCart";
@@ -25,6 +26,7 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDeliveryPartner, setIsDeliveryPartner] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -33,10 +35,12 @@ export default function Header() {
         .then((res) => res.json())
         .then((data) => {
           if (data?.isAdmin) setIsAdmin(true);
+          if (data?.isDeliveryPartner) setIsDeliveryPartner(true);
         })
         .catch(() => {});
     } else {
       setIsAdmin(false);
+      setIsDeliveryPartner(false);
     }
   }, [user]);
 
@@ -218,12 +222,30 @@ export default function Header() {
                       {isAdmin && (
                         <a
                           href="/admin"
-                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-purple-700 hover:bg-purple-50 transition-colors font-bold"
                         >
                           <LayoutDashboard size={14} />
                           <span>Admin Dashboard</span>
                         </a>
                       )}
+
+                      {isDeliveryPartner && (
+                        <a
+                          href="/delivery"
+                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-indigo-700 hover:bg-indigo-50 transition-colors font-bold"
+                        >
+                          <Truck size={14} />
+                          <span>Delivery Portal</span>
+                        </a>
+                      )}
+
+                      <a
+                        href="/account"
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <User size={14} />
+                        <span>My Account</span>
+                      </a>
 
                       <a
                         href="/wishlist"
@@ -234,7 +256,7 @@ export default function Header() {
                       </a>
 
                       <a
-                        href="/orders"
+                        href="/account"
                         className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <Package size={14} />
@@ -330,10 +352,28 @@ export default function Header() {
               {isAdmin && (
                 <a
                   href="/admin"
-                  className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"
+                  className="flex items-center gap-2 rounded-lg bg-purple-50 px-3 py-2 text-xs font-bold text-purple-800"
                 >
                   <LayoutDashboard size={14} />
                   <span>Admin Panel</span>
+                </a>
+              )}
+              {isDeliveryPartner && (
+                <a
+                  href="/delivery"
+                  className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800"
+                >
+                  <Truck size={14} />
+                  <span>Delivery Portal</span>
+                </a>
+              )}
+              {user && (
+                <a
+                  href="/account"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  <User size={14} />
+                  <span>My Account</span>
                 </a>
               )}
               <a
