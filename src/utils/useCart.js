@@ -37,6 +37,42 @@ export default function useCart() {
 
   const refreshCart = useCallback(async () => {
     if (user) {
+      const local = getLocalCart();
+      const guestItems = local.filter(
+        (i) => typeof i.id === "string" && i.id.startsWith("local_")
+      );
+
+      // Merge any unmerged guest items atomically BEFORE reading server cart
+      if (guestItems.length > 0) {
+        try {
+          const mergeRes = await fetch("/api/cart/merge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: guestItems }),
+          });
+          if (mergeRes.ok) {
+            const mergeData = await mergeRes.json();
+            if (mergeData.success && Array.isArray(mergeData.cartItems)) {
+              const merged = mergeData.cartItems.map((ci) => ({
+                id: ci.id,
+                product_id: ci.product_id,
+                name: ci.name,
+                price: parseFloat(ci.price || 0),
+                image_url: ci.image_url,
+                quantity: ci.quantity,
+                stock_quantity: ci.stock_quantity ?? 99,
+              }));
+              setItems(merged);
+              setLocalCart(merged);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("Cart merge error:", err);
+        }
+      }
+
       try {
         const res = await fetch("/api/cart");
         if (res.ok) {
@@ -83,44 +119,6 @@ export default function useCart() {
       };
     }
   }, []);
-
-  // When user signs in: merge guest cart atomically into database cart
-  useEffect(() => {
-    if (user) {
-      const local = getLocalCart();
-      // Check if there are local guest items to merge
-      const hasGuestItems = local.some((i) => typeof i.id === "string" && i.id.startsWith("local_"));
-      if (hasGuestItems && local.length > 0) {
-        fetch("/api/cart/merge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: local }),
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success && data.cartItems) {
-              const merged = data.cartItems.map((ci) => ({
-                id: ci.id,
-                product_id: ci.product_id,
-                name: ci.name,
-                price: parseFloat(ci.price || 0),
-                image_url: ci.image_url,
-                quantity: ci.quantity,
-                stock_quantity: ci.stock_quantity ?? 99,
-              }));
-              setLocalCart(merged);
-              setItems(merged);
-            } else {
-              refreshCart();
-            }
-          })
-          .catch((err) => {
-            console.error("Cart merge error:", err);
-            refreshCart();
-          });
-      }
-    }
-  }, [user, refreshCart]);
 
   const addToCart = async (product, quantity = 1) => {
     const productId = product.id || product.product_id;

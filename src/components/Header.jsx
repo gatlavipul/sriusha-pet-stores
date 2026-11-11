@@ -16,11 +16,13 @@ import {
   Truck,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
+import useAuth from "@/utils/useAuth";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
 
 export default function Header() {
   const { data: user } = useUser();
+  const { signOut } = useAuth();
   const { totalCount } = useCart();
   const { count: wishlistCount } = useWishlist();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -28,6 +30,18 @@ export default function Header() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDeliveryPartner, setIsDeliveryPartner] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [signInHref, setSignInHref] = useState("/account/signin");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname || "/";
+      if (path.startsWith("/checkout") || path.startsWith("/cart")) {
+        setSignInHref("/account/signin?callbackUrl=/checkout");
+      } else {
+        setSignInHref("/account/signin");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -47,37 +61,18 @@ export default function Header() {
     }
   }, [user]);
 
-  const isClerkReady = () =>
-    typeof window !== "undefined" &&
-    Boolean(window.Clerk && (window.Clerk.loaded || window.Clerk.status === "ready"));
-
-  const handleDirectClerkSignIn = async (e) => {
-    if (typeof window === "undefined") return;
-    if (window.Clerk && !isClerkReady() && typeof window.__initClerk === "function") {
-      e.preventDefault();
-      await window.__initClerk();
-    }
-    if (isClerkReady() && typeof window.Clerk.openSignIn === "function") {
-      e.preventDefault();
-      window.Clerk.openSignIn({
-        signUpUrl: "/account/signup",
-        fallbackRedirectUrl: "/account/signin",
-      });
-    }
+  const handleSignOut = async () => {
+    setUserDropdownOpen(false);
+    setMobileMenuOpen(false);
+    await signOut({ callbackUrl: "/", redirect: true });
   };
 
-  const handleDirectClerkSignUp = async (e) => {
-    if (typeof window === "undefined") return;
-    if (window.Clerk && !isClerkReady() && typeof window.__initClerk === "function") {
-      e.preventDefault();
-      await window.__initClerk();
-    }
-    if (isClerkReady() && typeof window.Clerk.openSignUp === "function") {
-      e.preventDefault();
-      window.Clerk.openSignUp({
-        signInUrl: "/account/signin",
-        fallbackRedirectUrl: "/account",
-      });
+  const handleOpenClerkProfile = () => {
+    setUserDropdownOpen(false);
+    if (typeof window !== "undefined" && typeof window.Clerk?.openUserProfile === "function") {
+      window.Clerk.openUserProfile();
+    } else {
+      window.location.href = "/account";
     }
   };
 
@@ -231,11 +226,19 @@ export default function Header() {
                 <div className="relative">
                   <button
                     onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 py-1.5 pl-2 pr-3 text-xs font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 py-1.5 pl-1.5 pr-3 text-xs font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-100 transition-colors"
                   >
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563EB] text-[11px] font-bold text-white">
-                      {(user.name || user.email || "U")[0].toUpperCase()}
-                    </div>
+                    {user.image ? (
+                      <img
+                        src={user.image}
+                        alt={user.name || "User"}
+                        className="h-6 w-6 rounded-full object-cover border border-gray-200"
+                      />
+                    ) : (
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563EB] text-[11px] font-bold text-white">
+                        {(user.name || user.email || "U")[0].toUpperCase()}
+                      </div>
+                    )}
                     <span className="max-w-[100px] truncate text-left">
                       {user.name || user.email?.split("@")[0]}
                     </span>
@@ -244,11 +247,11 @@ export default function Header() {
 
                   {userDropdownOpen && (
                     <div
-                      className="absolute right-0 mt-2 w-48 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg z-50 text-xs"
+                      className="absolute right-0 mt-2 w-56 rounded-2xl border border-gray-200 bg-white p-1.5 shadow-xl z-50 text-xs"
                       onMouseLeave={() => setUserDropdownOpen(false)}
                     >
-                      <div className="px-3 py-2 border-b border-gray-100">
-                        <p className="font-semibold text-gray-900 truncate">
+                      <div className="px-3 py-2.5 border-b border-gray-100">
+                        <p className="font-bold text-gray-900 truncate">
                           {user.name || "Customer"}
                         </p>
                         <p className="text-[11px] text-gray-500 truncate">
@@ -259,7 +262,7 @@ export default function Header() {
                       {isAdmin && (
                         <a
                           href="/admin"
-                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-purple-700 hover:bg-purple-50 transition-colors font-bold"
+                          className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-purple-700 hover:bg-purple-50 transition-colors font-bold"
                         >
                           <LayoutDashboard size={14} />
                           <span>Admin Dashboard</span>
@@ -269,7 +272,7 @@ export default function Header() {
                       {isDeliveryPartner && (
                         <a
                           href="/delivery"
-                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-indigo-700 hover:bg-indigo-50 transition-colors font-bold"
+                          className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-indigo-700 hover:bg-indigo-50 transition-colors font-bold"
                         >
                           <Truck size={14} />
                           <span>Delivery Portal</span>
@@ -278,55 +281,60 @@ export default function Header() {
 
                       <a
                         href="/account"
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                        className="mt-1 flex items-center gap-2 rounded-xl px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <User size={14} />
                         <span>My Account</span>
                       </a>
 
                       <a
-                        href="/wishlist"
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <Heart size={14} className="text-rose-500" />
-                        <span>My Wishlist ({wishlistCount})</span>
-                      </a>
-
-                      <a
-                        href="/account"
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                        href="/orders"
+                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <Package size={14} />
                         <span>My Orders</span>
                       </a>
 
                       <a
-                        href="/account/logout"
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
+                        href="/wishlist"
+                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <Heart size={14} className="text-rose-500" />
+                        <span>Wishlist ({wishlistCount})</span>
+                      </a>
+
+                      {typeof window !== "undefined" && window.Clerk?.user && (
+                        <button
+                          type="button"
+                          onClick={handleOpenClerkProfile}
+                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <ShieldCheck size={14} className="text-[#2563EB]" />
+                          <span>Manage Security Profile</span>
+                        </button>
+                      )}
+
+                      <div className="my-1 border-t border-gray-100" />
+
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-left font-semibold text-red-600 hover:bg-red-50 transition-colors"
                       >
                         <LogOut size={14} />
                         <span>Sign Out</span>
-                      </a>
+                      </button>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <a
-                    href="/account/signin"
-                    onClick={handleDirectClerkSignIn}
-                    className="text-xs font-medium text-gray-700 hover:text-[#2563EB] px-2 py-1.5"
-                  >
-                    Sign In
-                  </a>
-                  <a
-                    href="/account/signup"
-                    onClick={handleDirectClerkSignUp}
-                    className="rounded-lg bg-[#2563EB] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-[#1D4ED8] transition-colors"
-                  >
-                    Sign Up
-                  </a>
-                </div>
+                <a
+                  href={signInHref}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#2563EB] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all whitespace-nowrap"
+                >
+                  <User size={14} />
+                  <span>Sign In / Join Us</span>
+                </a>
               )}
 
               {/* Mobile Menu Toggle */}
@@ -437,34 +445,23 @@ export default function Header() {
                 <span>My Orders</span>
               </a>
               {user ? (
-                <a
-                  href="/account/logout"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50"
                 >
                   <LogOut size={14} />
                   <span>Sign Out</span>
-                </a>
+                </button>
               ) : (
-                <div className="grid grid-cols-2 gap-2 pt-2">
+                <div className="pt-2">
                   <a
-                    href="/account/signin"
-                    onClick={(e) => {
-                      setMobileMenuOpen(false);
-                      handleDirectClerkSignIn(e);
-                    }}
-                    className="rounded-lg border border-gray-300 py-2 text-center text-xs font-semibold text-gray-800"
+                    href={signInHref}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-2.5 text-center text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8]"
                   >
-                    Sign In
-                  </a>
-                  <a
-                    href="/account/signup"
-                    onClick={(e) => {
-                      setMobileMenuOpen(false);
-                      handleDirectClerkSignUp(e);
-                    }}
-                    className="rounded-lg bg-[#2563EB] py-2 text-center text-xs font-semibold text-white"
-                  >
-                    Sign Up
+                    <User size={14} />
+                    <span>Sign In / Join Us</span>
                   </a>
                 </div>
               )}
