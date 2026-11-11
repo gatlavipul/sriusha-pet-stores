@@ -14,7 +14,7 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
-import { signOut } from "@auth/create/react";
+import useAuth from "@/utils/useAuth";
 
 const FAILURE_REASONS = [
   "Customer unavailable / phone unreachable",
@@ -28,6 +28,7 @@ const FAILURE_REASONS = [
 
 export default function DeliveryPartnerPage() {
   const { data: user, loading: userLoading } = useUser();
+  const { signOut } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [partner, setPartner] = useState(null);

@@ -15,10 +15,11 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { signOut } from "@auth/create/react";
+import useAuth from "@/utils/useAuth";
 
 export default function CustomerAccountPage() {
   const { data: user, loading: userLoading } = useUser();
+  const { signOut } = useAuth();
   const [profile, setProfile] = useState(null);
   const [orders, setOrders] = useState([]);
   const [addresses, setAddresses] = useState([]);

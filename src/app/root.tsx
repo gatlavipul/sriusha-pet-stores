@@ -401,6 +401,25 @@ export const useHandleScreenshotRequest = () => {
     };
   }, []);
 };
+function getClerkScriptUrl(publishableKey?: string): string {
+  if (!publishableKey) return '';
+  try {
+    const raw = publishableKey.replace(/^pk_(test|live)_/, '');
+    const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded =
+      typeof atob === 'function'
+        ? atob(base64)
+        : Buffer.from(base64, 'base64').toString('utf-8');
+    const domain = decoded.endsWith('$') ? decoded.slice(0, -1) : decoded;
+    if (domain && domain.includes('.')) {
+      return `https://${domain}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`;
+    }
+  } catch {
+    // fallback
+  }
+  return 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   useHandshakeParent();
   useHandleScreenshotRequest();
@@ -409,6 +428,31 @@ export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const pathname = location?.pathname;
   const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const clerkScriptUrl = getClerkScriptUrl(clerkPublishableKey);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !clerkPublishableKey) return;
+    let attempts = 0;
+    const tryInit = async () => {
+      const win = window as any;
+      if (win.Clerk) {
+        if (typeof win.__initClerk === 'function') {
+          await win.__initClerk();
+        }
+        return true;
+      }
+      return false;
+    };
+    tryInit();
+    const interval = setInterval(async () => {
+      attempts += 1;
+      if ((await tryInit()) || attempts > 80) {
+        clearInterval(interval);
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [clerkPublishableKey]);
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'sandbox:navigation') {
@@ -442,28 +486,52 @@ export function Layout({ children }: { children: ReactNode }) {
         <Links />
         <script type="module" src="/src/__create/dev-error-overlay.js"></script>
         <link rel="icon" href="/src/__create/favicon.png" />
-        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+        {clerkPublishableKey ? (
           <>
-            <script
-              async
-              crossOrigin="anonymous"
-              data-clerk-publishable-key={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-              src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
-              type="text/javascript"
-            />
             <script
               dangerouslySetInnerHTML={{
                 __html: `
-                  window.addEventListener('load', async function () {
-                    if (window.Clerk && !window.Clerk.isReady) {
-                      try {
-                        await window.Clerk.load();
-                      } catch (e) {
-                        console.warn('[Clerk] Load warning:', e);
-                      }
+                  window.__initClerk = async function () {
+                    if (!window.Clerk) return null;
+                    if (!window.__clerkInitPromise) {
+                      window.__clerkInitPromise = (async function () {
+                        try {
+                          if (!window.Clerk.isReady) {
+                            await window.Clerk.load();
+                          }
+                          window.__clerkReady = true;
+                          window.dispatchEvent(new CustomEvent('clerk:ready', { detail: window.Clerk }));
+                          return window.Clerk;
+                        } catch (e) {
+                          console.warn('[Clerk] Load warning:', e);
+                          window.__clerkInitPromise = null;
+                          return null;
+                        }
+                      })();
                     }
-                  });
+                    return window.__clerkInitPromise;
+                  };
+                  if (typeof window !== 'undefined') {
+                    window.addEventListener('DOMContentLoaded', function() {
+                      if (window.Clerk) window.__initClerk();
+                    });
+                    window.addEventListener('load', function() {
+                      if (window.Clerk) window.__initClerk();
+                    });
+                  }
                 `,
+              }}
+            />
+            <script
+              async
+              crossOrigin="anonymous"
+              data-clerk-publishable-key={clerkPublishableKey}
+              src={clerkScriptUrl}
+              type="text/javascript"
+              onLoad={() => {
+                if (typeof window !== 'undefined' && typeof (window as any).__initClerk === 'function') {
+                  (window as any).__initClerk();
+                }
               }}
             />
           </>

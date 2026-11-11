@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
-import useAuth from "@/utils/useAuth";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "@auth/create/react";
-import { Lock, ArrowRight, Shield, CheckCircle, AlertCircle } from "lucide-react";
+import { Shield, CheckCircle, ExternalLink } from "lucide-react";
 import { getLocalCart } from "@/utils/useCart";
 
 function resolveSafeRedirect(rawCallbackUrl, role) {
@@ -49,15 +48,34 @@ function resolveSafeRedirect(rawCallbackUrl, role) {
   return url;
 }
 
+function getClerkHostedDomain() {
+  try {
+    const pk =
+      (typeof import.meta !== "undefined" && import.meta.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
+      (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
+      "";
+    if (!pk.startsWith("pk_")) return null;
+    const raw = pk.replace(/^pk_(test|live)_/, "");
+    const decoded = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
+    const domain = decoded.endsWith("$") ? decoded.slice(0, -1) : decoded;
+    return domain.includes(".") ? domain : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function SignInPage() {
   const { data: session, status } = useSession();
-  const [error, setError] = useState(null);
   const [infoMessage, setInfoMessage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [clerkLoaded, setClerkLoaded] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [mountFallback, setMountFallback] = useState(false);
+  const clerkMountRef = useRef(null);
+  const isRedirectingRef = useRef(false);
+  const isMountedWidgetRef = useRef(false);
 
-  const { signInWithCredentials } = useAuth();
+  const hostedDomain = getClerkHostedDomain();
+  const hostedSignInUrl = hostedDomain ? `https://${hostedDomain}/sign-in` : null;
 
   // Check for registration success notice
   useEffect(() => {
@@ -69,17 +87,26 @@ export default function SignInPage() {
     }
   }, []);
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (status === "authenticated" && session) {
-      handlePostLoginRedirect();
-    }
-  }, [status, session]);
+  const handlePostLoginRedirect = useCallback(async () => {
+    if (isRedirectingRef.current) return;
+    isRedirectingRef.current = true;
+    setRedirecting(true);
 
-  const handlePostLoginRedirect = async () => {
     try {
-      // 1. Fetch verified role directly from server database
-      const roleRes = await fetch("/api/admin/check-role");
+      const headers = {};
+      if (typeof window !== "undefined" && window.Clerk?.session) {
+        try {
+          const token = await window.Clerk.session.getToken();
+          if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+          }
+        } catch {
+          // fallback to fetch interceptor
+        }
+      }
+
+      // 1. Fetch verified role directly from server Neon database
+      const roleRes = await fetch("/api/admin/check-role", { headers });
       const roleData = await roleRes.json();
       const verifiedRole = roleData?.role || session?.user?.role || "customer";
 
@@ -89,7 +116,10 @@ export default function SignInPage() {
         try {
           await fetch("/api/cart/merge", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...headers,
+            },
             body: JSON.stringify({ items: localItems }),
           });
         } catch (e) {
@@ -97,7 +127,7 @@ export default function SignInPage() {
         }
       }
 
-      // 3. Resolve safe destination URL
+      // 3. Resolve safe destination URL based on authoritative Neon role
       const params = new URLSearchParams(window.location.search);
       const rawCallbackUrl = params.get("callbackUrl");
       const targetUrl = resolveSafeRedirect(rawCallbackUrl, verifiedRole);
@@ -107,48 +137,133 @@ export default function SignInPage() {
       console.error("Redirect resolution error:", e);
       window.location.href = "/";
     }
-  };
+  }, [session?.user?.role]);
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
-
-    if (!cleanEmail || !cleanPassword) {
-      setError("Please fill in both email and password.");
-      setLoading(false);
-      return;
+  // Redirect immediately if already authenticated
+  useEffect(() => {
+    if (status === "authenticated" && session) {
+      handlePostLoginRedirect();
     }
+  }, [status, session, handlePostLoginRedirect]);
 
-    try {
-      const res = await signInWithCredentials({
-        email: cleanEmail,
-        password: cleanPassword,
-        redirect: false,
-      });
+  // Mount Clerk's official Sign-In widget directly (never show custom forms)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-      if (res?.error) {
-        setError("Invalid email or password. Please verify your credentials and try again.");
-        setLoading(false);
-        return;
+    let unsubscribeListener = null;
+    let pollTimer = null;
+    let fallbackTimer = null;
+
+    const mountClerkWidget = async () => {
+      if (!window.Clerk) return false;
+
+      try {
+        if (!window.Clerk.isReady && typeof window.__initClerk === "function") {
+          await window.__initClerk();
+        } else if (!window.Clerk.isReady) {
+          await window.Clerk.load();
+        }
+
+        if (!window.Clerk.isReady) return false;
+
+        setClerkLoaded(true);
+        setMountFallback(false);
+
+        // If user already signed into Clerk, perform role check & redirect immediately
+        if (window.Clerk.user && window.Clerk.session) {
+          handlePostLoginRedirect();
+          return true;
+        }
+
+        // Listen for completion of Clerk Sign-In
+        if (typeof window.Clerk.addListener === "function") {
+          unsubscribeListener = window.Clerk.addListener((resources) => {
+            if (resources?.user && resources?.session) {
+              handlePostLoginRedirect();
+            }
+          });
+        }
+
+        // Mount Clerk <SignIn /> component directly into container
+        if (clerkMountRef.current && !isMountedWidgetRef.current) {
+          isMountedWidgetRef.current = true;
+          const params = new URLSearchParams(window.location.search);
+          const rawCallback = params.get("callbackUrl") || "/account";
+
+          window.Clerk.mountSignIn(clerkMountRef.current, {
+            signUpUrl: "/account/signup",
+            fallbackRedirectUrl: rawCallback,
+            appearance: {
+              elements: {
+                rootBox: "mx-auto w-full",
+                card: "rounded-3xl border border-gray-200 shadow-xs w-full",
+              },
+            },
+          });
+        }
+
+        return true;
+      } catch (err) {
+        console.warn("[Clerk] Mount SignIn warning:", err);
+        return false;
       }
+    };
 
-      // On successful credentials authentication, perform cart merge and safe role routing
-      await handlePostLoginRedirect();
-    } catch (err) {
-      console.error("Sign in error:", err);
-      setError("Invalid email or password. Please check your credentials and try again.");
-      setLoading(false);
-    }
-  };
+    const onClerkReady = () => {
+      mountClerkWidget();
+    };
 
-  if (status === "loading") {
+    window.addEventListener("clerk:ready", onClerkReady);
+
+    // Attempt immediate mount, or poll briefly while Clerk JS downloads
+    mountClerkWidget().then((mounted) => {
+      if (!mounted) {
+        let attempts = 0;
+        pollTimer = setInterval(async () => {
+          attempts += 1;
+          const ok = await mountClerkWidget();
+          if (ok || attempts >= 50) {
+            clearInterval(pollTimer);
+          }
+        }, 150);
+
+        fallbackTimer = setTimeout(() => {
+          if (!isMountedWidgetRef.current) {
+            setMountFallback(true);
+          }
+        }, 5000);
+      }
+    });
+
+    return () => {
+      window.removeEventListener("clerk:ready", onClerkReady);
+      if (pollTimer) clearInterval(pollTimer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (typeof unsubscribeListener === "function") {
+        try {
+          unsubscribeListener();
+        } catch {
+          // noop
+        }
+      }
+      if (clerkMountRef.current && isMountedWidgetRef.current && window.Clerk?.unmountSignIn) {
+        try {
+          window.Clerk.unmountSignIn(clerkMountRef.current);
+        } catch {
+          // noop
+        }
+        isMountedWidgetRef.current = false;
+      }
+    };
+  }, [handlePostLoginRedirect]);
+
+  if (status === "loading" || redirecting) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-[#FDFDFD]">
-        <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-2" />
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FDFDFD] p-4">
+        <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
+        <p className="text-xs font-semibold text-gray-600">
+          {redirecting ? "Verifying store access & redirecting..." : "Checking authentication..."}
+        </p>
       </div>
     );
   }
@@ -169,11 +284,11 @@ export default function SignInPage() {
             Welcome to Sri Usha
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Sign in to access your orders, account details &amp; store portal
+            Sign in securely with Clerk to access your orders &amp; store portal
           </p>
         </div>
 
-        {/* Info Message (e.g. Registered) */}
+        {/* Info Message */}
         {infoMessage && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-semibold text-emerald-800 shadow-2xs">
             <CheckCircle size={16} className="text-emerald-600 shrink-0" />
@@ -181,106 +296,63 @@ export default function SignInPage() {
           </div>
         )}
 
-        {/* Sign In Form */}
-        <form
-          noValidate
-          onSubmit={onSubmit}
-          className="rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs"
-        >
-          <div className="space-y-4">
-            {typeof window !== "undefined" && window.Clerk && (
+        {/* Direct Clerk Sign-In Widget Container */}
+        <div className="flex flex-col items-center justify-center">
+          {!clerkLoaded && !mountFallback && (
+            <div className="w-full rounded-3xl border border-gray-200 bg-white p-8 shadow-xs flex flex-col items-center justify-center text-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
+              <p className="text-sm font-semibold text-gray-800">
+                Connecting to Clerk Sign-In...
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Securing your authentication session
+              </p>
+            </div>
+          )}
+
+          {/* Clerk mounts its official SignIn component directly here */}
+          <div
+            ref={clerkMountRef}
+            id="clerk-signin-container"
+            className="w-full flex justify-center"
+          />
+
+          {/* Hosted Clerk Fallback if third-party scripts are blocked */}
+          {mountFallback && hostedSignInUrl && (
+            <div className="w-full rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs text-center space-y-4">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]">
+                <Shield size={24} />
+              </div>
               <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.Clerk?.openSignIn) {
-                      window.Clerk.openSignIn({
-                        afterSignInUrl: "/account",
-                      });
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-xs sm:text-sm font-semibold text-gray-700 shadow-xs hover:bg-gray-50 transition-all mb-4"
-                >
-                  <Shield size={15} className="text-[#2563EB]" />
-                  <span>Sign In with Clerk SSO</span>
-                </button>
-                <div className="flex items-center gap-3 my-3">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  <span className="text-[11px] font-medium text-gray-400">OR USE CREDENTIALS</span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
+                <h2 className="text-base font-bold text-gray-900">
+                  Continue to Clerk Sign-In
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Click below to sign in directly via Clerk&apos;s secure authentication portal.
+                </p>
               </div>
-            )}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                required
-                name="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs sm:text-sm outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all"
-              />
+              <a
+                href={hostedSignInUrl}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+              >
+                <span>Sign In with Clerk</span>
+                <ExternalLink size={15} />
+              </a>
             </div>
+          )}
+        </div>
 
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-gray-700">
-                  Password
-                </label>
-              </div>
-              <input
-                required
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs sm:text-sm outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all"
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
-                <AlertCircle size={15} className="shrink-0 text-red-600" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Signing In...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In</span>
-                  <ArrowRight size={15} />
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="mt-6 text-center text-xs text-gray-500">
-            Don&apos;t have an account?{" "}
+        {/* Helpful footer link to Create Account or Return Home */}
+        <div className="mt-6 flex flex-col items-center gap-3 text-center">
+          <p className="text-xs text-gray-500">
+            New to Sri Usha?{" "}
             <a
               href="/account/signup"
               className="font-bold text-[#2563EB] hover:underline"
             >
-              Create Account
+              Create Account with Clerk
             </a>
-          </div>
-        </form>
-
-        <div className="mt-6 text-center">
+          </p>
           <a
             href="/"
             className="text-xs text-gray-500 hover:text-gray-900 transition-colors"

@@ -13,8 +13,10 @@ import {
   MapPin,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import useAuth from "@/utils/useAuth";
 
 export default function AdminHeader() {
+  const { signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -136,13 +138,14 @@ export default function AdminHeader() {
               View Storefront
             </a>
 
-            <a
-              href="/account/signin"
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/" })}
               className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-red-600 transition-colors"
             >
               <LogOut size={14} />
               <span>Sign Out</span>
-            </a>
+            </button>
 
             <button
               className="lg:hidden p-2 text-gray-600 hover:text-gray-900"
@@ -235,13 +238,14 @@ export default function AdminHeader() {
               >
                 View Storefront
               </a>
-              <a
-                href="/account/signin"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-red-600 hover:bg-red-50 text-left"
               >
                 <LogOut size={16} />
                 Sign Out
-              </a>
+              </button>
             </div>
           </div>
         </div>

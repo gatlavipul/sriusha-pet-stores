@@ -34,15 +34,38 @@ export default function Header() {
       fetch("/api/admin/check-role")
         .then((res) => res.json())
         .then((data) => {
-          if (data?.isAdmin) setIsAdmin(true);
-          if (data?.isDeliveryPartner) setIsDeliveryPartner(true);
+          setIsAdmin(Boolean(data?.isAdmin));
+          setIsDeliveryPartner(Boolean(data?.isDeliveryPartner));
         })
-        .catch(() => {});
+        .catch(() => {
+          setIsAdmin(false);
+          setIsDeliveryPartner(false);
+        });
     } else {
       setIsAdmin(false);
       setIsDeliveryPartner(false);
     }
   }, [user]);
+
+  const handleDirectClerkSignIn = (e) => {
+    if (typeof window !== "undefined" && window.Clerk?.isReady && typeof window.Clerk.openSignIn === "function") {
+      e.preventDefault();
+      window.Clerk.openSignIn({
+        signUpUrl: "/account/signup",
+        fallbackRedirectUrl: "/account/signin",
+      });
+    }
+  };
+
+  const handleDirectClerkSignUp = (e) => {
+    if (typeof window !== "undefined" && window.Clerk?.isReady && typeof window.Clerk.openSignUp === "function") {
+      e.preventDefault();
+      window.Clerk.openSignUp({
+        signInUrl: "/account/signin",
+        fallbackRedirectUrl: "/account",
+      });
+    }
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -277,12 +300,14 @@ export default function Header() {
                 <div className="flex items-center gap-2">
                   <a
                     href="/account/signin"
+                    onClick={handleDirectClerkSignIn}
                     className="text-xs font-medium text-gray-700 hover:text-[#2563EB] px-2 py-1.5"
                   >
                     Sign In
                   </a>
                   <a
                     href="/account/signup"
+                    onClick={handleDirectClerkSignUp}
                     className="rounded-lg bg-[#2563EB] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-[#1D4ED8] transition-colors"
                   >
                     Sign Up
@@ -409,12 +434,20 @@ export default function Header() {
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <a
                     href="/account/signin"
+                    onClick={(e) => {
+                      setMobileMenuOpen(false);
+                      handleDirectClerkSignIn(e);
+                    }}
                     className="rounded-lg border border-gray-300 py-2 text-center text-xs font-semibold text-gray-800"
                   >
                     Sign In
                   </a>
                   <a
                     href="/account/signup"
+                    onClick={(e) => {
+                      setMobileMenuOpen(false);
+                      handleDirectClerkSignUp(e);
+                    }}
                     className="rounded-lg bg-[#2563EB] py-2 text-center text-xs font-semibold text-white"
                   >
                     Sign Up

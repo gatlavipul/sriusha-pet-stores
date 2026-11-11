@@ -1,6 +1,7 @@
-import { useState } from "react";
-import useAuth from "@/utils/useAuth";
-import { ArrowRight, AlertCircle, CheckCircle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useSession } from "@auth/create/react";
+import { Shield, ExternalLink } from "lucide-react";
+import { getLocalCart } from "@/utils/useCart";
 
 function getSafeCallback(raw) {
   if (!raw || typeof raw !== "string") return "/account";
@@ -20,90 +21,209 @@ function getSafeCallback(raw) {
   return url;
 }
 
+function getClerkHostedDomain() {
+  try {
+    const pk =
+      (typeof import.meta !== "undefined" && import.meta.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
+      (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
+      "";
+    if (!pk.startsWith("pk_")) return null;
+    const raw = pk.replace(/^pk_(test|live)_/, "");
+    const decoded = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
+    const domain = decoded.endsWith("$") ? decoded.slice(0, -1) : decoded;
+    return domain.includes(".") ? domain : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function SignUpPage() {
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const { data: session, status } = useSession();
+  const [clerkLoaded, setClerkLoaded] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [mountFallback, setMountFallback] = useState(false);
+  const clerkMountRef = useRef(null);
+  const isRedirectingRef = useRef(false);
+  const isMountedWidgetRef = useRef(false);
 
-  const { signInWithCredentials } = useAuth();
+  const hostedDomain = getClerkHostedDomain();
+  const hostedSignUpUrl = hostedDomain ? `https://${hostedDomain}/sign-up` : null;
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const cleanName = name.trim();
-    const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
-
-    if (!cleanName || !cleanEmail || !cleanPassword) {
-      setError("Please fill in all fields.");
-      setLoading(false);
-      return;
-    }
-
-    if (cleanName.length < 2) {
-      setError("Name must be at least 2 characters long.");
-      setLoading(false);
-      return;
-    }
-
-    if (cleanPassword.length < 6) {
-      setError("Password must be at least 6 characters.");
-      setLoading(false);
-      return;
-    }
+  const handlePostSignupRedirect = useCallback(async () => {
+    if (isRedirectingRef.current) return;
+    isRedirectingRef.current = true;
+    setRedirecting(true);
 
     try {
-      // Call dedicated Customer Signup API which strictly creates role = 'customer'
-      const response = await fetch("/api/account/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: cleanName,
-          email: cleanEmail,
-          password: cleanPassword,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || "Failed to create account. Please try again.");
-        setLoading(false);
-        return;
+      const headers = {};
+      if (typeof window !== "undefined" && window.Clerk?.session) {
+        try {
+          const token = await window.Clerk.session.getToken();
+          if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+          }
+        } catch {
+          // fallback
+        }
       }
 
-      // Automatically sign in the newly registered customer
+      // Sync customer profile into Neon PostgreSQL (strictly defaults to role = 'customer')
+      try {
+        await fetch("/api/account/me", { headers });
+      } catch (e) {
+        console.warn("Customer sync during signup warning:", e);
+      }
+
+      // Merge guest cart if present
+      const localItems = getLocalCart();
+      if (localItems && localItems.length > 0) {
+        try {
+          await fetch("/api/cart/merge", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...headers,
+            },
+            body: JSON.stringify({ items: localItems }),
+          });
+        } catch (e) {
+          console.warn("Cart merge during signup warning:", e);
+        }
+      }
+
       const params = new URLSearchParams(window.location.search);
       const rawCallback = params.get("callbackUrl");
-      const safeCallback = getSafeCallback(rawCallback);
+      window.location.href = getSafeCallback(rawCallback);
+    } catch (e) {
+      console.error("Signup redirect error:", e);
+      window.location.href = "/account";
+    }
+  }, []);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (status === "authenticated" && session) {
+      handlePostSignupRedirect();
+    }
+  }, [status, session, handlePostSignupRedirect]);
+
+  // Mount Clerk's official Sign-Up widget directly (never show custom forms)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let unsubscribeListener = null;
+    let pollTimer = null;
+    let fallbackTimer = null;
+
+    const mountClerkWidget = async () => {
+      if (!window.Clerk) return false;
 
       try {
-        const signinRes = await signInWithCredentials({
-          email: cleanEmail,
-          password: cleanPassword,
-          redirect: false,
-        });
-
-        if (signinRes?.error) {
-          // If auto sign-in was blocked, redirect to signin page with message
-          window.location.href = `/account/signin?registered=true&callbackUrl=${encodeURIComponent(safeCallback)}`;
-          return;
+        if (!window.Clerk.isReady && typeof window.__initClerk === "function") {
+          await window.__initClerk();
+        } else if (!window.Clerk.isReady) {
+          await window.Clerk.load();
         }
 
-        window.location.href = safeCallback;
-      } catch (authErr) {
-        window.location.href = `/account/signin?registered=true&callbackUrl=${encodeURIComponent(safeCallback)}`;
+        if (!window.Clerk.isReady) return false;
+
+        setClerkLoaded(true);
+        setMountFallback(false);
+
+        if (window.Clerk.user && window.Clerk.session) {
+          handlePostSignupRedirect();
+          return true;
+        }
+
+        if (typeof window.Clerk.addListener === "function") {
+          unsubscribeListener = window.Clerk.addListener((resources) => {
+            if (resources?.user && resources?.session) {
+              handlePostSignupRedirect();
+            }
+          });
+        }
+
+        if (clerkMountRef.current && !isMountedWidgetRef.current) {
+          isMountedWidgetRef.current = true;
+          const params = new URLSearchParams(window.location.search);
+          const safeCallback = getSafeCallback(params.get("callbackUrl"));
+
+          window.Clerk.mountSignUp(clerkMountRef.current, {
+            signInUrl: "/account/signin",
+            fallbackRedirectUrl: safeCallback,
+            appearance: {
+              elements: {
+                rootBox: "mx-auto w-full",
+                card: "rounded-3xl border border-gray-200 shadow-xs w-full",
+              },
+            },
+          });
+        }
+
+        return true;
+      } catch (err) {
+        console.warn("[Clerk] Mount SignUp warning:", err);
+        return false;
       }
-    } catch (err) {
-      console.error("Signup submission error:", err);
-      setError("Network or server error. Please try again later.");
-      setLoading(false);
-    }
-  };
+    };
+
+    const onClerkReady = () => {
+      mountClerkWidget();
+    };
+
+    window.addEventListener("clerk:ready", onClerkReady);
+
+    mountClerkWidget().then((mounted) => {
+      if (!mounted) {
+        let attempts = 0;
+        pollTimer = setInterval(async () => {
+          attempts += 1;
+          const ok = await mountClerkWidget();
+          if (ok || attempts >= 50) {
+            clearInterval(pollTimer);
+          }
+        }, 150);
+
+        fallbackTimer = setTimeout(() => {
+          if (!isMountedWidgetRef.current) {
+            setMountFallback(true);
+          }
+        }, 5000);
+      }
+    });
+
+    return () => {
+      window.removeEventListener("clerk:ready", onClerkReady);
+      if (pollTimer) clearInterval(pollTimer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (typeof unsubscribeListener === "function") {
+        try {
+          unsubscribeListener();
+        } catch {
+          // noop
+        }
+      }
+      if (clerkMountRef.current && isMountedWidgetRef.current && window.Clerk?.unmountSignUp) {
+        try {
+          window.Clerk.unmountSignUp(clerkMountRef.current);
+        } catch {
+          // noop
+        }
+        isMountedWidgetRef.current = false;
+      }
+    };
+  }, [handlePostSignupRedirect]);
+
+  if (status === "loading" || redirecting) {
+    return (
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FDFDFD] p-4">
+        <div className="h-9 w-9 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
+        <p className="text-xs font-semibold text-gray-600">
+          {redirecting ? "Setting up your customer account..." : "Loading..."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen w-full flex-col justify-center bg-gradient-to-b from-gray-50 to-white p-4 sm:p-6">
@@ -120,122 +240,64 @@ export default function SignUpPage() {
             Create Customer Account
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Join thousands of happy pet parents in Hyderabad
+            Join thousands of happy pet parents in Hyderabad via Clerk
           </p>
         </div>
 
-        <form
-          noValidate
-          onSubmit={onSubmit}
-          className="rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs"
-        >
-          <div className="space-y-4">
-            {typeof window !== "undefined" && window.Clerk && (
+        {/* Direct Clerk Sign-Up Widget Container */}
+        <div className="flex flex-col items-center justify-center">
+          {!clerkLoaded && !mountFallback && (
+            <div className="w-full rounded-3xl border border-gray-200 bg-white p-8 shadow-xs flex flex-col items-center justify-center text-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
+              <p className="text-sm font-semibold text-gray-800">
+                Connecting to Clerk Registration...
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Preparing your secure customer signup
+              </p>
+            </div>
+          )}
+
+          <div
+            ref={clerkMountRef}
+            id="clerk-signup-container"
+            className="w-full flex justify-center"
+          />
+
+          {mountFallback && hostedSignUpUrl && (
+            <div className="w-full rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs text-center space-y-4">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]">
+                <Shield size={24} />
+              </div>
               <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.Clerk?.openSignUp) {
-                      window.Clerk.openSignUp({
-                        afterSignUpUrl: "/account",
-                      });
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-xs sm:text-sm font-semibold text-gray-700 shadow-xs hover:bg-gray-50 transition-all mb-4"
-                >
-                  <ArrowRight size={15} className="text-[#2563EB]" />
-                  <span>Sign Up with Clerk</span>
-                </button>
-                <div className="flex items-center gap-3 my-3">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  <span className="text-[11px] font-medium text-gray-400">OR CREATE WITH EMAIL</span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
+                <h2 className="text-base font-bold text-gray-900">
+                  Continue to Clerk Sign-Up
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Click below to create your customer account directly on Clerk.
+                </p>
               </div>
-            )}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Full Name
-              </label>
-              <input
-                required
-                name="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Ramesh Kumar"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs sm:text-sm outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all"
-              />
+              <a
+                href={hostedSignUpUrl}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+              >
+                <span>Create Account with Clerk</span>
+                <ExternalLink size={15} />
+              </a>
             </div>
+          )}
+        </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                required
-                name="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs sm:text-sm outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                required
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-xs sm:text-sm outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all"
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
-                <AlertCircle size={15} className="shrink-0 text-red-600" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Creating Account...</span>
-                </>
-              ) : (
-                <>
-                  <span>Create Account</span>
-                  <ArrowRight size={15} />
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="mt-6 text-center text-xs text-gray-500">
+        <div className="mt-6 flex flex-col items-center gap-3 text-center">
+          <p className="text-xs text-gray-500">
             Already have an account?{" "}
             <a
               href="/account/signin"
               className="font-bold text-[#2563EB] hover:underline"
             >
-              Sign In
+              Sign In with Clerk
             </a>
-          </div>
-        </form>
-
-        <div className="mt-6 text-center">
+          </p>
           <a
             href="/"
             className="text-xs text-gray-500 hover:text-gray-900 transition-colors"

@@ -28,6 +28,90 @@ export function isClerkConfigured() {
 }
 
 /**
+ * Derives the Clerk Frontend API domain from the publishable key
+ */
+export function getClerkFrontendApi() {
+  const publishable = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
+  if (!publishable.startsWith("pk_")) return null;
+  try {
+    const raw = publishable.replace(/^pk_(test|live)_/, "");
+    const base64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded =
+      typeof atob === "function"
+        ? atob(base64)
+        : Buffer.from(base64, "base64").toString("utf-8");
+    const domain = decoded.endsWith("$") ? decoded.slice(0, -1) : decoded;
+    return domain.includes(".") ? domain : null;
+  } catch {
+    return null;
+  }
+}
+
+const jwksKeyCache = new Map();
+
+/**
+ * Retrieves and caches the Clerk RSA public key from the instance's JWKS endpoint
+ */
+export async function getClerkPublicKey(kid, frontendApi) {
+  const cacheKey = `${frontendApi}:${kid || "default"}`;
+  if (jwksKeyCache.has(cacheKey)) {
+    return jwksKeyCache.get(cacheKey);
+  }
+  try {
+    const res = await fetch(`https://${frontendApi}/.well-known/jwks.json`);
+    if (!res.ok) return null;
+    const jwks = await res.json();
+    const keyData = jwks.keys?.find((k) => k.kid === kid) || jwks.keys?.[0];
+    if (!keyData) return null;
+
+    const cryptoKey = await crypto.subtle.importKey(
+      "jwk",
+      keyData,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    jwksKeyCache.set(cacheKey, cryptoKey);
+    return cryptoKey;
+  } catch (err) {
+    logger.warn("clerk_jwks_fetch_failed", "Failed to retrieve or import Clerk JWKS public key", err);
+    return null;
+  }
+}
+
+/**
+ * Cryptographically verifies a Clerk RS256 JWT using Web Crypto Subtle API
+ */
+export async function verifyJwtSignature(token, frontendApi) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    const header = JSON.parse(
+      atob(headerB64.replace(/-/g, "+").replace(/_/g, "/"))
+    );
+    if (header.alg !== "RS256") return false;
+
+    const key = await getClerkPublicKey(header.kid, frontendApi);
+    if (!key) return false;
+
+    const binarySig = atob(signatureB64.replace(/-/g, "+").replace(/_/g, "/"));
+    const sigBytes = new Uint8Array(binarySig.length);
+    for (let i = 0; i < binarySig.length; i++) {
+      sigBytes[i] = binarySig.charCodeAt(i);
+    }
+
+    const enc = new TextEncoder();
+    const dataBytes = enc.encode(`${headerB64}.${payloadB64}`);
+
+    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sigBytes, dataBytes);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Decodes a JWT payload without external dependencies using native atob/Web Crypto
  */
 export function decodeJwtPayload(token) {
@@ -144,6 +228,16 @@ export async function verifyClerkToken(token) {
     return null;
   }
 
+  // Cryptographically verify RS256 signature against Clerk's JWKS endpoint
+  const frontendApi = getClerkFrontendApi();
+  if (frontendApi) {
+    const isSignatureValid = await verifyJwtSignature(token, frontendApi);
+    if (!isSignatureValid) {
+      logger.warn("clerk_jwt_sig_invalid", "Clerk JWT cryptographic signature verification failed");
+      return null;
+    }
+  }
+
   const clerkUserId = payload.sub;
   let email = payload.email || payload.primary_email || null;
   let name = payload.name || payload.first_name || null;
@@ -215,7 +309,36 @@ export async function syncUserWithDatabase(clerkProfile) {
       LIMIT 1
     `;
     if (byClerkId.length > 0) {
-      return byClerkId[0];
+      const existingByClerk = byClerkId[0];
+      // Reconcile placeholder records if verified email becomes available later
+      if (
+        email &&
+        existingByClerk.email?.endsWith("@clerk.sriushastores.in") &&
+        !email.endsWith("@clerk.sriushastores.in")
+      ) {
+        const realAccountByEmail = await sql`
+          SELECT id, name, email, role, clerk_user_id, image
+          FROM auth_users
+          WHERE LOWER(email) = LOWER(${email})
+          LIMIT 1
+        `;
+        if (realAccountByEmail.length > 0) {
+          const targetUser = realAccountByEmail[0];
+          await sql`UPDATE auth_users SET clerk_user_id = NULL WHERE id = ${existingByClerk.id}`;
+          await sql`UPDATE auth_users SET clerk_user_id = ${clerkUserId} WHERE id = ${targetUser.id}`;
+          targetUser.clerk_user_id = clerkUserId;
+          logger.info("clerk_user_relinked", `Re-linked Clerk ID ${clerkUserId} to existing ${targetUser.role} user ${targetUser.email}`);
+          return targetUser;
+        } else {
+          await sql`
+            UPDATE auth_users
+            SET email = ${email}, name = COALESCE(NULLIF(${name || ""}, ''), name)
+            WHERE id = ${existingByClerk.id}
+          `;
+          existingByClerk.email = email;
+        }
+      }
+      return existingByClerk;
     }
   }
 
@@ -319,7 +442,9 @@ export async function getAuthoritativeSession(req) {
 
 export default {
   isClerkConfigured,
+  getClerkFrontendApi,
   extractAuthToken,
+  verifyJwtSignature,
   verifyClerkToken,
   syncUserWithDatabase,
   getAuthoritativeSession,

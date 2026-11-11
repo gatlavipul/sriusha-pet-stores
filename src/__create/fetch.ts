@@ -65,9 +65,38 @@ export const fetchWithHeaders = async (
   };
 
   const isExternalFetch = !isFirstPartyURL(url) && !isSecondPartyUrl(url);
+  // If it's an API request to our own server, automatically inject Clerk Bearer token if available
+  if (url.startsWith('/api')) {
+    if (!isBackend() && typeof window !== 'undefined' && (window as any).Clerk?.session) {
+      try {
+        const clerkSession = (window as any).Clerk.session;
+        if (typeof clerkSession.getToken === 'function') {
+          const token = await clerkSession.getToken();
+          if (token) {
+            if (input instanceof Request) {
+              const headers = new Headers(input.headers);
+              if (!headers.has('authorization')) {
+                headers.set('authorization', `Bearer ${token}`);
+                return originalFetch(new Request(input, { headers }));
+              }
+            } else {
+              const headers = new Headers(init?.headers ?? {});
+              if (!headers.has('authorization')) {
+                headers.set('authorization', `Bearer ${token}`);
+                return originalFetch(input, { ...init, headers });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Fall through safely to originalFetch
+      }
+    }
+    return originalFetch(input, init);
+  }
+
   // we should not add headers to requests that don't go to our own server
-  // or if it's an API request
-  if (isExternalFetch || url.startsWith('/api')) {
+  if (isExternalFetch) {
     return originalFetch(input, init);
   }
 
