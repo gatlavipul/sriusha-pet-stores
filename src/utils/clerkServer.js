@@ -265,10 +265,11 @@ export async function verifyClerkToken(token) {
     }
   }
 
+  const normalizedEmail = email ? email.toLowerCase().trim() : null;
   const profile = {
     clerkUserId,
-    email: email ? email.toLowerCase().trim() : null,
-    name: name || "Customer",
+    email: normalizedEmail,
+    name: name || (normalizedEmail ? normalizedEmail.split("@")[0] : "Customer"),
   };
 
   // Cache verified session for 60 seconds
