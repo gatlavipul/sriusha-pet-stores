@@ -6,6 +6,9 @@
   directory = "functions"
   node_bundler = "esbuild"
 
+[functions."*"]
+  external_node_modules = ["@neondatabase/serverless", "bcryptjs", "razorpay"]
+
 [[redirects]]
   from = "/*"
   to = "/.netlify/functions/index"
