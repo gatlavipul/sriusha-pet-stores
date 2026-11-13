@@ -1,16 +1,32 @@
 import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
 import { getSafeReturnUrl } from "@/utils/safeRedirect";
+import { getAuthoritativeSession } from "@/utils/clerkServer";
 
 export { getSafeReturnUrl };
+
+async function resolveSession(req) {
+  try {
+    const session = await auth();
+    if (session?.user?.id) return session;
+  } catch {}
+
+  if (req) {
+    try {
+      const clerkSession = await getAuthoritativeSession(req);
+      if (clerkSession?.user) return clerkSession;
+    } catch {}
+  }
+  return null;
+}
 
 /**
  * Validates that the current request is from an authenticated admin.
  * Re-queries the database directly to prevent session tampering.
  */
-export async function requireAdmin() {
+export async function requireAdmin(req) {
   try {
-    const session = await auth();
+    const session = await resolveSession(req);
     if (!session?.user?.id) {
       return { error: "Authentication required", status: 401 };
     }
@@ -37,9 +53,9 @@ export async function requireAdmin() {
 /**
  * Validates that the current request is from an authenticated delivery partner.
  */
-export async function requireDeliveryPartner() {
+export async function requireDeliveryPartner(req) {
   try {
-    const session = await auth();
+    const session = await resolveSession(req);
     if (!session?.user?.id) {
       return { error: "Authentication required", status: 401 };
     }
@@ -66,9 +82,15 @@ export async function requireDeliveryPartner() {
 /**
  * Validates that the current request has an authenticated session and is in allowedRoles.
  */
-export async function requireRole(allowedRoles = []) {
+export async function requireRole(allowedRoles = [], req) {
+  let roles = allowedRoles;
+  let requestObj = req;
+  if (!Array.isArray(allowedRoles) && allowedRoles && typeof allowedRoles === "object" && !req) {
+    requestObj = allowedRoles;
+    roles = [];
+  }
   try {
-    const session = await auth();
+    const session = await resolveSession(requestObj);
     if (!session?.user?.id) {
       return { error: "Authentication required", status: 401 };
     }
@@ -85,9 +107,9 @@ export async function requireRole(allowedRoles = []) {
       return { error: "User not found", status: 404 };
     }
 
-    if (!allowedRoles.includes(rows[0].role)) {
+    if (Array.isArray(roles) && roles.length > 0 && !roles.includes(rows[0].role)) {
       return {
-        error: `Access denied. Permitted roles: ${allowedRoles.join(", ")}`,
+        error: `Access denied. Permitted roles: ${roles.join(", ")}`,
         status: 403,
       };
     }
@@ -102,9 +124,9 @@ export async function requireRole(allowedRoles = []) {
 /**
  * Validates that the current request has an authenticated session.
  */
-export async function requireUser() {
+export async function requireUser(req) {
   try {
-    const session = await auth();
+    const session = await resolveSession(req);
     if (!session?.user?.id) {
       return { error: "Authentication required", status: 401 };
     }

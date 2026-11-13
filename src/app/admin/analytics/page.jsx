@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 import {
   BarChart3,
   IndianRupee,
@@ -17,20 +17,16 @@ import {
 } from "lucide-react";
 
 export default function AdminAnalyticsPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/analytics");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState("30d");
 
   useEffect(() => {
-    if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/analytics";
-      }
-    } else if (!userLoading && user) {
+    if (adminStatus === "authorized") {
       fetchAnalytics();
     }
-  }, [user, userLoading, range]);
+  }, [adminStatus, range]);
 
   const fetchAnalytics = async () => {
     try {
@@ -47,15 +43,12 @@ export default function AdminAnalyticsPage() {
     }
   };
 
-  if (userLoading) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA]">
-        <AdminHeader />
-        <div className="py-20 text-center text-xs text-gray-500 font-semibold">
-          Verifying administrator permissions...
-        </div>
-      </div>
-    );
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
   }
 
   const overview = data?.overview || {};

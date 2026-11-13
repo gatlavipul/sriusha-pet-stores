@@ -128,8 +128,38 @@ export async function notifyCustomer({
       }
     } else if (channel === "sms" && Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)) {
       dispatchStatus = "queued";
-    } else if (channel === "whatsapp" && Boolean(process.env.WHATSAPP_API_TOKEN)) {
-      dispatchStatus = "queued";
+    } else if (channel === "whatsapp") {
+      const waToken = process.env.WHATSAPP_API_TOKEN;
+      const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      if (waToken && waPhoneId) {
+        try {
+          const digits = String(recipient).replace(/\D/g, "");
+          const e164 = digits.length === 10 ? `91${digits}` : digits;
+          const waRes = await fetch(
+            `https://graph.facebook.com/v20.0/${waPhoneId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${waToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: e164,
+                type: "text",
+                text: { body: `${title}\n${content}` },
+              }),
+            }
+          );
+          dispatchStatus = waRes.ok ? "sent" : "failed";
+        } catch (waErr) {
+          logger.error("whatsapp_dispatch_error", "WhatsApp API call failed", waErr, { orderId });
+          dispatchStatus = "failed";
+        }
+      } else {
+        // Safe queue/log mode when WhatsApp credentials are not yet configured
+        dispatchStatus = "queued";
+      }
     }
 
     const res = await sql`
@@ -257,6 +287,18 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           content: `Good news! Your order ${orderNum} has been confirmed by Sri Usha Vet & Pet Stores.`,
         });
       }
+
+      if (customerPhone) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "whatsapp",
+          recipient: customerPhone,
+          templateType: "order_confirmed",
+          title: `Order Confirmed: ${orderNum}`,
+          content: `Hi ${customerName}, your Sri Usha Vet & Pet Stores order ${orderNum} (₹${parseFloat(order.total_amount || 0).toFixed(0)}) is confirmed!`,
+        });
+      }
       break;
     }
 
@@ -277,6 +319,18 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           templateType: "order_packing",
           title: `Packing Your Order: ${orderNum}`,
           content: `Your items are now being carefully packed with tamper-proof seal at our Uppal store.`,
+        });
+      }
+
+      if (customerPhone) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "whatsapp",
+          recipient: customerPhone,
+          templateType: "order_packing",
+          title: `Order Packed: ${orderNum}`,
+          content: `Hi ${customerName}, your order ${orderNum} is now being packed with care at Sri Usha Vet & Pet Stores.`,
         });
       }
       break;
@@ -358,6 +412,15 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           title: "Out for Delivery",
           content: `Sri Usha: Order ${orderNum} is out for delivery with ${driverName}. Please keep payment ready if COD.`,
         });
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "whatsapp",
+          recipient: customerPhone,
+          templateType: "out_for_delivery",
+          title: `Out for Delivery: ${orderNum}`,
+          content: `Hi ${customerName}, ${driverName} is out for delivery with your Sri Usha order ${orderNum}!`,
+        });
       }
       break;
     }
@@ -379,6 +442,18 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           templateType: "order_delivered",
           title: `Delivered! Thank you from Sri Usha Vet Stores`,
           content: `Your package for ${orderNum} has been delivered. Thank you for trusting Sri Usha for your veterinary and pet care needs.`,
+        });
+      }
+
+      if (customerPhone) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "whatsapp",
+          recipient: customerPhone,
+          templateType: "order_delivered",
+          title: `Order Delivered: ${orderNum}`,
+          content: `Hi ${customerName}, your Sri Usha order ${orderNum} has been delivered. Thank you for caring with us! 🐾`,
         });
       }
       break;
@@ -403,6 +478,18 @@ export async function triggerOrderNotifications(eventType, order, extra = {}) {
           templateType: "delivery_failed",
           title: `Delivery Attempt Unsuccessful: ${orderNum}`,
           content: `We were unable to complete delivery (${reason}). Our support team will reach out to reschedule.`,
+        });
+      }
+
+      if (customerPhone) {
+        await notifyCustomer({
+          userId: order.user_id,
+          orderId: order.id,
+          channel: "whatsapp",
+          recipient: customerPhone,
+          templateType: "delivery_failed",
+          title: `Delivery Issue: ${orderNum}`,
+          content: `Hi ${customerName}, delivery for order ${orderNum} could not be completed (${reason}). Our Uppal store team will reschedule with you shortly.`,
         });
       }
       break;

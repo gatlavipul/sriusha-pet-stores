@@ -2,6 +2,7 @@ import sql from "@/app/api/utils/sql";
 import { requireDeliveryPartner, sanitizeText } from "@/app/api/utils/security";
 import { ORDER_STATUS, validateTransition } from "@/utils/orderWorkflow";
 import { triggerOrderNotifications, NOTIFICATION_TYPES } from "@/utils/notificationService";
+import { awardPointsForCompletedOrder } from "@/utils/loyaltyService";
 import logger from "@/utils/logger";
 
 export async function PUT(request, { params }) {
@@ -14,7 +15,7 @@ export async function PUT(request, { params }) {
     const partnerId = authResult.user.id;
     const { id } = params;
     const body = await request.json().catch(() => ({}));
-    const { status, failure_reason, notes } = body;
+    const { status, failure_reason, notes, delivery_otp } = body;
 
     const allowedPartnerStatuses = [
       ORDER_STATUS.OUT_FOR_DELIVERY,
@@ -122,6 +123,15 @@ export async function PUT(request, { params }) {
 
     // Success delivery handling: Mark COD as paid strictly on verified successful delivery
     if (status === ORDER_STATUS.DELIVERED) {
+      if (delivery_otp !== undefined && currentOrder.delivery_otp) {
+        if (String(delivery_otp).trim() !== String(currentOrder.delivery_otp).trim()) {
+          return Response.json(
+            { error: "Invalid 4-digit Delivery OTP. Please confirm the OTP with the customer." },
+            { status: 400 }
+          );
+        }
+      }
+
       const isCOD = currentOrder.payment_method === "cod";
       const targetPaymentStatus = isCOD ? "paid" : currentOrder.payment_status;
 
@@ -148,6 +158,7 @@ export async function PUT(request, { params }) {
       `;
 
       const updated = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+      await awardPointsForCompletedOrder(Number(id));
       await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_DELIVERED, updated[0], {
         driverName: authResult.user.name,
       });

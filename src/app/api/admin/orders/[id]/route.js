@@ -6,6 +6,8 @@ import {
   validateTransition,
 } from "@/utils/orderWorkflow";
 import { triggerOrderNotifications, NOTIFICATION_TYPES } from "@/utils/notificationService";
+import { awardPointsForCompletedOrder } from "@/utils/loyaltyService";
+import { restoreStockForOrder, recordStockMovement } from "@/utils/stockService";
 import logger from "@/utils/logger";
 
 const VALID_STATUSES = ALL_ORDER_STATUSES;
@@ -155,6 +157,20 @@ export async function PUT(request, { params }) {
         );
       }
 
+      if (
+        currentOrder.prescription_required &&
+        currentOrder.prescription_status !== "approved" &&
+        ["packing", "ready_for_delivery", "assigned", "out_for_delivery", "delivered"].includes(targetStatus)
+      ) {
+        return Response.json(
+          {
+            error:
+              "Veterinary prescription must be approved before packing or dispatching this order.",
+          },
+          { status: 400 }
+        );
+      }
+
       // Enforce role-based workflow transition rules
       if (targetStatus !== currentOrder.status) {
         const transitionError = validateTransition(currentOrder.status, targetStatus, "admin");
@@ -175,7 +191,7 @@ export async function PUT(request, { params }) {
         updates.push(`delivery_failure_reason = NULL`);
       }
 
-      // Inventory restoration when cancelling (strictly once!)
+      // Inventory restoration when cancelling (handled atomically after update via restoreStockForOrder)
       if (targetStatus === ORDER_STATUS.CANCELLED && currentOrder.status !== ORDER_STATUS.CANCELLED) {
         updates.push(`cancelled_at = NOW()`);
         if (cancellation_reason) {
@@ -183,31 +199,53 @@ export async function PUT(request, { params }) {
           values.push(sanitizeText(cancellation_reason, 255));
           paramIndex++;
         }
-
-        // Restore inventory stock only if not already restored
-        if (!currentOrder.stock_restored) {
-          const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
-          for (const item of items) {
-            if (item.product_id && item.quantity > 0) {
-              await sql`
-                UPDATE products 
-                SET stock_quantity = stock_quantity + ${item.quantity}, updated_at = NOW()
-                WHERE id = ${item.product_id}
-              `;
-            }
-          }
-          updates.push(`stock_restored = TRUE`);
-        }
       } else if (currentOrder.status === ORDER_STATUS.CANCELLED && targetStatus !== ORDER_STATUS.CANCELLED) {
         // Un-cancelling: re-decrement stock and reset stock_restored flag
-        const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
+        const items = await sql`SELECT product_id, variant_id, variant_name, product_name, quantity FROM order_items WHERE order_id = ${id}`;
         for (const item of items) {
-          if (item.product_id && item.quantity > 0) {
-            await sql`
+          if (!item.product_id || item.quantity <= 0) continue;
+          if (item.variant_id) {
+            const prev = await sql`SELECT stock_quantity, label FROM product_variants WHERE id = ${item.variant_id} LIMIT 1`;
+            const prevStock = prev?.[0]?.stock_quantity ?? 0;
+            const upd = await sql`
+              UPDATE product_variants
+              SET stock_quantity = GREATEST(0, stock_quantity - ${item.quantity}), updated_at = NOW()
+              WHERE id = ${item.variant_id}
+              RETURNING stock_quantity, label
+            `;
+            await recordStockMovement({
+              productId: item.product_id,
+              variantId: item.variant_id,
+              productName: item.product_name,
+              variantLabel: upd?.[0]?.label || item.variant_name,
+              changeAmount: -item.quantity,
+              previousStock: prevStock,
+              newStock: upd?.[0]?.stock_quantity ?? Math.max(0, prevStock - item.quantity),
+              reason: "order_reopened",
+              orderId: Number(id),
+              userId: authResult.user.id,
+              userName: authResult.user.name,
+            });
+          } else {
+            const prev = await sql`SELECT stock_quantity, name FROM products WHERE id = ${item.product_id} LIMIT 1`;
+            const prevStock = prev?.[0]?.stock_quantity ?? 0;
+            const upd = await sql`
               UPDATE products 
               SET stock_quantity = GREATEST(0, stock_quantity - ${item.quantity}), updated_at = NOW()
               WHERE id = ${item.product_id}
+              RETURNING stock_quantity, name
             `;
+            await recordStockMovement({
+              productId: item.product_id,
+              productName: upd?.[0]?.name || item.product_name,
+              changeAmount: -item.quantity,
+              previousStock: prevStock,
+              newStock: upd?.[0]?.stock_quantity ?? Math.max(0, prevStock - item.quantity),
+              reason: "order_reopened",
+              orderId: Number(id),
+              userId: authResult.user.id,
+              userName: authResult.user.name,
+            });
           }
         }
         updates.push(`stock_restored = FALSE`);
@@ -237,6 +275,18 @@ export async function PUT(request, { params }) {
     const query = `UPDATE orders SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`;
     const updated = await sql(query, values);
 
+    if (targetStatus === ORDER_STATUS.CANCELLED && currentOrder.status !== ORDER_STATUS.CANCELLED) {
+      await restoreStockForOrder({
+        orderId: Number(id),
+        userId: authResult.user.id,
+        userName: authResult.user.name,
+      });
+    }
+
+    if (updated[0]?.status === ORDER_STATUS.DELIVERED && updated[0]?.payment_status === "paid") {
+      await awardPointsForCompletedOrder(Number(id));
+    }
+
     // Record timeline in order_status_history if status changed
     if (targetStatus && targetStatus !== currentOrder.status) {
       const historyNotes = notes ? sanitizeText(notes, 255) : `Status updated to ${targetStatus} by administrator`;
@@ -248,10 +298,18 @@ export async function PUT(request, { params }) {
         )
       `;
 
-      if (targetStatus === ORDER_STATUS.CONFIRMED) {
-        await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_CONFIRMED, updated[0]);
-      } else if (targetStatus === ORDER_STATUS.CANCELLED) {
-        await triggerOrderNotifications(NOTIFICATION_TYPES.ORDER_CANCELLED, updated[0]);
+      const eventMap = {
+        [ORDER_STATUS.CONFIRMED]: NOTIFICATION_TYPES.ORDER_CONFIRMED,
+        [ORDER_STATUS.PACKING]: NOTIFICATION_TYPES.ORDER_PACKING,
+        [ORDER_STATUS.READY_FOR_DELIVERY]: NOTIFICATION_TYPES.ORDER_READY,
+        [ORDER_STATUS.ASSIGNED]: NOTIFICATION_TYPES.ORDER_ASSIGNED,
+        [ORDER_STATUS.OUT_FOR_DELIVERY]: NOTIFICATION_TYPES.OUT_FOR_DELIVERY,
+        [ORDER_STATUS.DELIVERED]: NOTIFICATION_TYPES.ORDER_DELIVERED,
+        [ORDER_STATUS.CANCELLED]: NOTIFICATION_TYPES.ORDER_CANCELLED,
+      };
+      const notifEvent = eventMap[targetStatus];
+      if (notifEvent) {
+        await triggerOrderNotifications(notifEvent, updated[0]);
       }
 
       logger.info("admin_order_status_updated", `Admin ${authResult.user.id} updated order #${id} status to ${targetStatus}`, {

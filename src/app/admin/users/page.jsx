@@ -1,14 +1,21 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { Plus, Trash2, Shield, User, Truck, Filter, CheckCircle } from "lucide-react";
-import useUser from "@/utils/useUser";
+import { Plus, Trash2, Shield, User, Truck, Filter, CheckCircle, Eye, X, PawPrint, ShoppingBag } from "lucide-react";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
 export default function AdminUsersPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/users");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("role") || "all";
+    }
+    return "all";
+  });
+  const [selectedUserDetails, setSelectedUserDetails] = useState(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -17,27 +24,27 @@ export default function AdminUsersPage() {
   });
 
   useEffect(() => {
-    if (!userLoading && user) {
-      checkAdminAccess();
-    } else if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/users";
-      }
-    }
-  }, [user, userLoading]);
-
-  const checkAdminAccess = async () => {
-    try {
-      const response = await fetch("/api/admin/check-role");
-      const data = await response.json();
-      if (!data.isAdmin) {
-        if (typeof window !== "undefined") window.location.href = "/";
-        return;
-      }
+    if (adminStatus === "authorized") {
       fetchUsers();
-    } catch (error) {
-      console.error("Error checking admin access:", error);
-      if (typeof window !== "undefined") window.location.href = "/";
+    }
+  }, [adminStatus]);
+
+  const openUserDetails = async (userId) => {
+    setLoadingUserDetails(true);
+    setSelectedUserDetails({ loading: true });
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedUserDetails(data);
+      } else {
+        setSelectedUserDetails(null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user details:", err);
+      setSelectedUserDetails(null);
+    } finally {
+      setLoadingUserDetails(false);
     }
   };
 
@@ -119,6 +126,14 @@ export default function AdminUsersPage() {
     if (roleFilter === "customer") return u.role === "customer" || !u.role;
     return true;
   });
+
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
@@ -331,7 +346,15 @@ export default function AdminUsersPage() {
                     const isAdm = item.role === "admin";
                     const isDel = item.role === "delivery_partner";
 
-                    return (
+                    if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
+  }
+
+  return (
                       <tr
                         key={item.id}
                         className="hover:bg-gray-50/60 transition-colors"
@@ -377,7 +400,10 @@ export default function AdminUsersPage() {
                           </p>
                         </td>
                         <td className="px-6 py-4 text-xs font-semibold text-[#111827]">
-                          {item.total_orders || 0} orders
+                          <div>{item.total_orders || 0} orders</div>
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                            <PawPrint className="h-2.5 w-2.5" /> {item.pets_count || 0} pets
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-xs font-bold text-[#2ECC71]">
                           ₹{Number(item.total_spent || 0).toFixed(0)}
@@ -402,14 +428,25 @@ export default function AdminUsersPage() {
                           </select>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(item.id)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50"
-                            title="Delete user"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openUserDetails(item.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-700 transition-colors hover:border-[#0066CC] hover:text-[#0066CC]"
+                              title="View orders & pet profiles"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>Inspect</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item.id)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50"
+                              title="Delete user"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -420,6 +457,143 @@ export default function AdminUsersPage() {
           </div>
         </div>
       </div>
+
+      {/* Customer Details Modal (Orders + Linked Pet Profiles) */}
+      {selectedUserDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl border border-gray-200">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-4 mb-5">
+              <div>
+                <h2 className="text-lg font-black text-gray-900">
+                  {selectedUserDetails.loading
+                    ? "Loading customer profile..."
+                    : selectedUserDetails.user?.name || "Customer Profile"}
+                </h2>
+                {!selectedUserDetails.loading && selectedUserDetails.user && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {selectedUserDetails.user.email} • Role:{" "}
+                    <span className="font-bold uppercase text-gray-800">
+                      {selectedUserDetails.user.role}
+                    </span>
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedUserDetails(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {loadingUserDetails || selectedUserDetails.loading ? (
+              <div className="py-12 text-center text-xs font-semibold text-gray-500">
+                Loading linked pets and order history...
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Linked Pet Profiles */}
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold text-gray-900 mb-3">
+                    <PawPrint className="h-4 w-4 text-amber-600" />
+                    Linked Pet Profiles ({selectedUserDetails.pets?.length || 0})
+                  </h3>
+                  {!selectedUserDetails.pets?.length ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-xs text-gray-500">
+                      No pet profiles added by this user yet.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {selectedUserDetails.pets.map((pet) => (
+                        <div
+                          key={pet.id}
+                          className="flex items-center gap-3 rounded-xl border border-gray-200 bg-[#F8F9FA] p-3"
+                        >
+                          {pet.image_url ? (
+                            <img
+                              src={pet.image_url}
+                              alt={pet.name}
+                              className="h-12 w-12 rounded-xl object-cover border border-gray-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-black text-base shrink-0">
+                              {pet.type === "dog"
+                                ? "🐶"
+                                : pet.type === "cat"
+                                ? "🐱"
+                                : pet.type === "bird"
+                                ? "🐦"
+                                : "🐾"}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-extrabold text-gray-900 truncate">
+                              {pet.name}
+                            </p>
+                            <p className="text-[11px] text-gray-600 capitalize">
+                              {pet.type}
+                              {pet.breed ? ` • ${pet.breed}` : ""}
+                              {pet.age ? ` • ${pet.age}` : ""}
+                            </p>
+                            {pet.preferences?.food_preference && (
+                              <p className="text-[11px] text-gray-500 truncate">
+                                Food: {pet.preferences.food_preference}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Order History */}
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold text-gray-900 mb-3">
+                    <ShoppingBag className="h-4 w-4 text-[#0066CC]" />
+                    Order History ({selectedUserDetails.orders?.length || 0})
+                  </h3>
+                  {!selectedUserDetails.orders?.length ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-xs text-gray-500">
+                      No orders placed by this user yet.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden">
+                      {selectedUserDetails.orders.map((ord) => (
+                        <div
+                          key={ord.id}
+                          className="flex items-center justify-between bg-white px-4 py-3 text-xs"
+                        >
+                          <div>
+                            <p className="font-extrabold text-gray-900">
+                              {ord.order_number}
+                            </p>
+                            <p className="text-[11px] text-gray-500">
+                              {new Date(ord.created_at).toLocaleDateString("en-IN", {
+                                dateStyle: "medium",
+                              })}{" "}
+                              • {ord.item_count} item(s) • {ord.payment_method}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black text-gray-900">
+                              ₹{Number(ord.total_amount || 0).toFixed(0)}
+                            </p>
+                            <p className="text-[11px] font-bold capitalize text-[#0066CC]">
+                              {(ord.status || "").replace(/_/g, " ")}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,3 +1,10 @@
+import fs from "fs";
+if (fs.existsSync(".env")) {
+  fs.readFileSync(".env", "utf8").split("\n").forEach((l) => {
+    const [k, ...v] = l.split("=");
+    if (k && v.length && !process.env[k.trim()]) process.env[k.trim()] = v.join("=").trim();
+  });
+}
 import sql from "./src/app/api/utils/sql.js";
 import { getSafeReturnUrl } from "./src/utils/safeRedirect.js";
 import {

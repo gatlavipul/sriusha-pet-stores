@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
+import ProductCard from "@/components/ProductCard";
 import useCart from "@/utils/useCart";
+import useUser from "@/utils/useUser";
 import { useWishlist } from "@/utils/useWishlist";
 import {
   ArrowRight,
@@ -20,8 +22,66 @@ import {
 
 export default function HomePage() {
   const { addToCart } = useCart();
+  const { data: user } = useUser();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const [addedIds, setAddedIds] = useState({});
+  const [buyAgainItems, setBuyAgainItems] = useState([]);
+  const [primaryPetName, setPrimaryPetName] = useState("");
+  const [recentlyViewed, setRecentlyViewed] = useState([]);
+  const [pantryAlerts, setPantryAlerts] = useState([]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("usha_recently_viewed");
+        if (raw) setRecentlyViewed(JSON.parse(raw).slice(0, 4));
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setBuyAgainItems([]);
+      setPantryAlerts([]);
+      return;
+    }
+    Promise.all([
+      fetch("/api/orders").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/pets").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/pantry").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([ordData, petData, pantryData]) => {
+        if (petData?.pets?.length > 0) {
+          setPrimaryPetName(petData.pets[0].name || "");
+        }
+        if (pantryData?.pantry?.length > 0) {
+          setPantryAlerts(pantryData.pantry.filter((item) => item.running_low).slice(0, 2));
+        } else {
+          setPantryAlerts([]);
+        }
+        const seen = new Map();
+        for (const ord of ordData?.orders || []) {
+          for (const it of ord.items || []) {
+            if (it.product_id && !seen.has(it.product_id)) {
+              seen.set(it.product_id, {
+                id: it.product_id,
+                product_id: it.product_id,
+                variant_id: it.variant_id || null,
+                variant_name: it.variant_name || null,
+                name: it.product_name || it.name,
+                price: it.price,
+                image_url: it.product_image || it.image_url,
+                stock_quantity: 99,
+              });
+            }
+          }
+        }
+        setBuyAgainItems(Array.from(seen.values()).slice(0, 4));
+      })
+      .catch(() => {});
+  }, [user]);
 
   const { data: categoriesData, isLoading: isLoadingCategories } = useQuery({
     queryKey: ["categories"],
@@ -258,6 +318,141 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Pet Pantry Low-Stock Reminder Banner */}
+      {pantryAlerts.length > 0 && (
+        <section className="py-5 bg-amber-50 border-b border-amber-200">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🥫</span>
+              <div>
+                <p className="text-sm font-extrabold text-amber-950">
+                  {pantryAlerts[0].pet_name ? `${pantryAlerts[0].pet_name}'s ` : "Your "}
+                  {pantryAlerts[0].product_name} is ~{pantryAlerts[0].percent_consumed}% used
+                  {pantryAlerts[0].estimated_days_remaining > 0
+                    ? ` (about ${pantryAlerts[0].estimated_days_remaining} days left)`
+                    : " — time to restock!"}
+                </p>
+                <p className="text-xs text-amber-800">
+                  Predicted from your real order history. 1-tap reorder or subscribe for 5% off.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() =>
+                  handleAddToCart({
+                    id: pantryAlerts[0].product_id,
+                    product_id: pantryAlerts[0].product_id,
+                    variant_id: pantryAlerts[0].variant_id,
+                    variant_name: pantryAlerts[0].variant_name,
+                    name: pantryAlerts[0].product_name,
+                    price: pantryAlerts[0].price,
+                    image_url: pantryAlerts[0].image_url,
+                  })
+                }
+                className="rounded-xl bg-[#2563EB] px-4 py-2 text-xs font-bold text-white hover:bg-[#1D4ED8] shadow-xs"
+              >
+                1-Tap Reorder
+              </button>
+              <a
+                href="/account"
+                className="rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100"
+              >
+                Open Pet Pantry
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Buy Again (Real Previous Order Items) & Recently Viewed */}
+      {(buyAgainItems.length > 0 || recentlyViewed.length > 0) && (
+        <section className="py-10 bg-white border-b border-gray-100">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-10">
+            {buyAgainItems.length > 0 && (
+              <div>
+                <div className="flex items-end justify-between mb-5">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-[#27AE60]">
+                      Quick Hyperlocal Reorder
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">
+                      {primaryPetName
+                        ? `${primaryPetName}'s usual supplies may be running low — Buy again?`
+                        : "Buy Again from Your Previous Orders"}
+                    </h2>
+                  </div>
+                  <a href="/account?tab=orders" className="text-xs font-bold text-[#2563EB] hover:underline">
+                    View Past Orders →
+                  </a>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {buyAgainItems.map((item) => (
+                    <div
+                      key={`${item.product_id}-${item.variant_id || "base"}`}
+                      className="rounded-2xl border border-gray-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={item.image_url}
+                          alt={item.name}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-14 w-14 rounded-xl object-contain bg-gray-50 p-1 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-900 line-clamp-2">{item.name}</p>
+                          <p className="text-xs font-extrabold text-[#2563EB] mt-1">
+                            ₹{parseFloat(item.price || 0).toFixed(0)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleQuickAdd(item, e)}
+                        className="mt-3 w-full rounded-xl bg-[#27AE60] py-2 text-xs font-bold text-white hover:bg-[#219150]"
+                      >
+                        {addedIds[item.id] ? "✓ Added" : "+ Buy Again"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {recentlyViewed.length > 0 && (
+              <div>
+                <h2 className="text-lg font-extrabold text-gray-900 mb-4">Recently Viewed</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {recentlyViewed.map((item) => (
+                    <a
+                      key={item.id}
+                      href={`/products/${item.slug}`}
+                      className="rounded-2xl border border-gray-200 bg-white p-3 flex items-center gap-3 hover:border-[#2563EB] transition-colors"
+                    >
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-12 w-12 rounded-lg object-contain bg-gray-50 p-1 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-gray-900 truncate">{item.name}</p>
+                        <p className="text-xs font-bold text-gray-600 mt-0.5">
+                          ₹{parseFloat(item.price || 0).toFixed(0)}
+                        </p>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Featured Products */}
       <section className="py-14 sm:py-20 bg-[#F9FAFB] border-b border-gray-200">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -292,139 +487,13 @@ export default function HomePage() {
                     <div className="h-6 w-1/3 rounded bg-gray-200" />
                   </div>
                 ))
-              : featuredProducts.map((product) => {
-                  const isAdded = addedIds[product.id];
-                  const hasDiscount =
-                    product.compare_price &&
-                    parseFloat(product.compare_price) > 0 &&
-                    parseFloat(product.price) > 0;
-                  const discountPercent = hasDiscount
-                    ? Math.round(
-                        (parseFloat(product.compare_price) /
-                          (parseFloat(product.price) +
-                            parseFloat(product.compare_price))) *
-                          100
-                      )
-                    : null;
-
-                  const isWishlisted = isInWishlist(product.id);
-
-                  return (
-                    <div
-                      key={product.id}
-                      className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-4 shadow-xs hover:border-[#2563EB] hover:shadow-lg transition-all duration-200 relative"
-                    >
-                      <div>
-                        {/* Image Container with Badges */}
-                        <div className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3.5">
-                          <a href={`/products/${product.slug}`} className="block h-full w-full">
-                            <img
-                              src={product.image_url}
-                              alt={product.name}
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-                            />
-                          </a>
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleWishlist(product);
-                            }}
-                            title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                            className={`absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full shadow-xs transition-colors ${
-                              isWishlisted
-                                ? "bg-rose-50 text-rose-600 border border-rose-200"
-                                : "bg-white/90 text-gray-400 hover:text-rose-500 border border-gray-200"
-                            }`}
-                          >
-                            <Heart size={14} className={isWishlisted ? "fill-rose-500" : ""} />
-                          </button>
-
-                          {discountPercent && discountPercent > 0 && (
-                            <span className="absolute top-2.5 left-2.5 rounded-md bg-[#DC2626] px-2 py-0.5 text-[11px] font-bold text-white shadow-xs">
-                              {discountPercent}% OFF
-                            </span>
-                          )}
-                          <span className="absolute bottom-2.5 right-2.5 rounded-md bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                            In Stock
-                          </span>
-                        </div>
-
-                        {/* Brand and category */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          {product.brand && (
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                              {product.brand}
-                            </span>
-                          )}
-                          {product.category_name && (
-                            <span className="text-[10px] rounded bg-gray-100 px-1.5 py-0.5 text-gray-600 font-medium">
-                              {product.category_name}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Product Title */}
-                        <a
-                          href={`/products/${product.slug}`}
-                          className="text-sm font-semibold text-gray-900 group-hover:text-[#2563EB] transition-colors line-clamp-2 leading-snug"
-                        >
-                          {product.name}
-                        </a>
-
-                        {/* Star Rating */}
-                        <div className="mt-1.5 flex items-center gap-1 text-xs text-amber-500">
-                          <Star size={13} className="fill-amber-400 text-amber-400" />
-                          <span className="font-bold text-gray-700">4.8</span>
-                          <span className="text-gray-400">(42)</span>
-                        </div>
-                      </div>
-
-                      {/* Pricing and Add to Cart Button */}
-                      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                        <div>
-                          <div className="text-lg font-bold text-gray-900 leading-none">
-                            ₹{product.price}
-                          </div>
-                          {product.compare_price && (
-                            <div className="text-xs text-gray-400 line-through mt-0.5">
-                              ₹
-                              {(
-                                parseFloat(product.price) +
-                                parseFloat(product.compare_price)
-                              ).toFixed(0)}
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={(e) => handleQuickAdd(product, e)}
-                          className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold shadow-xs transition-all ${
-                            isAdded
-                              ? "bg-emerald-600 text-white"
-                              : "bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
-                          }`}
-                        >
-                          {isAdded ? (
-                            <>
-                              <Check size={14} />
-                              <span>Added</span>
-                            </>
-                          ) : (
-                            <>
-                              <ShoppingBag size={14} />
-                              <span>Add</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+              : featuredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    deliveryBadge="⚡ 30-60m Delivery"
+                  />
+                ))}
           </div>
         </div>
       </section>

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { Plus, Edit, Trash2, X, FolderTree, Loader2, Upload } from "lucide-react";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
 export default function AdminCategoriesPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/categories");
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -19,35 +19,10 @@ export default function AdminCategoriesPage() {
   });
 
   useEffect(() => {
-    if (!userLoading && user) {
-      checkAdminAccess();
-    } else if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/categories";
-      }
-    }
-  }, [user, userLoading]);
-
-  const checkAdminAccess = async () => {
-    try {
-      const response = await fetch("/api/admin/check-role");
-      const data = await response.json();
-
-      if (!data.isAdmin) {
-        if (typeof window !== "undefined") {
-          window.location.href = "/";
-        }
-        return;
-      }
-
+    if (adminStatus === "authorized") {
       fetchCategories();
-    } catch (error) {
-      console.error("Error checking admin access:", error);
-      if (typeof window !== "undefined") {
-        window.location.href = "/";
-      }
     }
-  };
+  }, [adminStatus]);
 
   const fetchCategories = async () => {
     try {
@@ -138,7 +113,15 @@ export default function AdminCategoriesPage() {
       .replace(/(^-|-$)/g, "");
   };
 
-  if (userLoading || loading) {
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#F8F9FA]">
         <AdminHeader />

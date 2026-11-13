@@ -72,14 +72,14 @@ export async function POST(request, { params }) {
       ) VALUES (
         ${prod[0].id}, ${session?.user?.id || null}, ${authorName}, 
         ${parsedRating}, ${sanitizeText(title, 100) || "Customer Review"}, 
-        ${cleanComment}, 'approved'
+        ${cleanComment}, 'pending'
       )
       RETURNING *
     `;
 
     return Response.json({
       success: true,
-      message: "Thank you for sharing your review!",
+      message: "Review submitted! It will appear on the product page once approved by our team.",
       review: inserted[0],
     });
   } catch (error) {

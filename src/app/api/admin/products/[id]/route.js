@@ -21,12 +21,13 @@ export async function GET(request, { params }) {
       return Response.json({ error: "Product not found" }, { status: 404 });
     }
 
-    // Fetch product images
-    const images = await sql`
-      SELECT * FROM product_images WHERE product_id = ${id} ORDER BY sort_order ASC, id ASC
-    `;
+    // Fetch product images and variants
+    const [images, variants] = await Promise.all([
+      sql`SELECT * FROM product_images WHERE product_id = ${id} ORDER BY sort_order ASC, id ASC`,
+      sql`SELECT * FROM product_variants WHERE product_id = ${id} ORDER BY sort_order ASC, id ASC`,
+    ]);
 
-    const product = { ...products[0], images };
+    const product = { ...products[0], images, variants };
     return Response.json({ product });
   } catch (error) {
     console.error("Error fetching product:", error);
@@ -62,6 +63,7 @@ export async function PUT(request, { params }) {
       "is_active",
       "brand",
       "weight",
+      "requires_prescription",
     ];
 
     for (const field of allowedFields) {
@@ -72,7 +74,7 @@ export async function PUT(request, { params }) {
       }
     }
 
-    if (setClauses.length === 0 && body.images === undefined) {
+    if (setClauses.length === 0 && body.images === undefined && body.variants === undefined) {
       return Response.json({ error: "No fields to update" }, { status: 400 });
     }
 
@@ -106,6 +108,33 @@ export async function PUT(request, { params }) {
       if (body.images.length > 0 && body.images[0]?.url) {
         await sql`UPDATE products SET image_url = ${body.images[0].url} WHERE id = ${id}`;
         product.image_url = body.images[0].url;
+      }
+    }
+
+    // Handle package size / weight variants update
+    if (body.variants !== undefined && Array.isArray(body.variants)) {
+      await sql`DELETE FROM product_variants WHERE product_id = ${id}`;
+      let totalVariantStock = 0;
+      for (let i = 0; i < body.variants.length; i++) {
+        const v = body.variants[i];
+        const label = String(v?.label || "").trim();
+        const price = parseFloat(v?.price || 0);
+        const stock = Math.max(0, parseInt(v?.stock_quantity || 0, 10) || 0);
+        if (!label || !Number.isFinite(price) || price <= 0) continue;
+        totalVariantStock += stock;
+        await sql`
+          INSERT INTO product_variants (
+            product_id, label, price, compare_price, stock_quantity, sku, is_active, sort_order
+          ) VALUES (
+            ${id}, ${label}, ${price},
+            ${v.compare_price ? parseFloat(v.compare_price) : null},
+            ${stock}, ${v.sku ? String(v.sku).trim() : null}, ${v.is_active !== false}, ${i}
+          )
+        `;
+      }
+      if (body.variants.length > 0) {
+        await sql`UPDATE products SET stock_quantity = ${totalVariantStock}, updated_at = NOW() WHERE id = ${id}`;
+        product.stock_quantity = totalVariantStock;
       }
     }
 

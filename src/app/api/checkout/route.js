@@ -1,5 +1,7 @@
-import sql from "@/app/api/utils/sql";
 import Razorpay from "razorpay";
+import { auth } from "@/auth";
+import { validateCheckoutPayload } from "@/utils/checkoutOrderHelper";
+import { checkServiceability } from "@/utils/serviceabilityService";
 
 export async function POST(request) {
   try {
@@ -10,73 +12,44 @@ export async function POST(request) {
       );
     }
 
+    const session = await auth();
     const body = await request.json();
-    const { items, promo_code } = body;
+    const { items, promo_code, customer_email, shipping_pincode, redeem_points, prescription_id } = body;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return Response.json({ error: "Your cart is empty." }, { status: 400 });
+    const validation = await validateCheckoutPayload({
+      items,
+      promoCode: promo_code,
+      userId: session?.user?.id || null,
+      customerEmail: customer_email || session?.user?.email || null,
+      redeemPoints: redeem_points || 0,
+      prescriptionId: prescription_id || null,
+    });
+
+    if (!validation.valid) {
+      return Response.json(
+        { error: validation.error, requiresPrescription: Boolean(validation.requiresPrescription) },
+        { status: validation.status || 400 }
+      );
     }
 
-    const productIds = items
-      .map((it) => parseInt(it.product_id || it.id, 10))
-      .filter((n) => Number.isInteger(n) && n > 0);
-
-    if (productIds.length === 0) {
-      return Response.json({ error: "Invalid products in cart." }, { status: 400 });
-    }
-
-    // Fetch live product records from database to ensure genuine prices & stock
-    const dbProducts = await sql`
-      SELECT id, name, price, sale_price, stock_quantity, is_active
-      FROM products
-      WHERE id = ANY(${productIds}::int[])
-    `;
-
-    const productMap = new Map();
-    dbProducts.forEach((p) => productMap.set(p.id, p));
-
-    let serverSubtotal = 0;
-
-    for (const item of items) {
-      const pid = parseInt(item.product_id || item.id, 10);
-      const dbProd = productMap.get(pid);
-
-      if (!dbProd || !dbProd.is_active) {
-        return Response.json(
-          { error: `Product "${item.name || 'Selected item'}" is no longer available.` },
-          { status: 400 }
-        );
+    let deliveryCharge = validation.subtotal >= 500 ? 0 : 40;
+    if (shipping_pincode) {
+      const serv = await checkServiceability(String(shipping_pincode), validation.subtotal);
+      if (!serv.serviceable) {
+        return Response.json({ error: serv.reason || "Address is not serviceable." }, { status: 400 });
       }
-
-      const requestedQty = Math.max(1, parseInt(item.quantity || 1, 10));
-      if (dbProd.stock_quantity < requestedQty) {
-        return Response.json(
-          {
-            error: `Only ${dbProd.stock_quantity} unit(s) of "${dbProd.name}" remaining in stock. Please adjust your quantity.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      const unitPrice = parseFloat(dbProd.sale_price || dbProd.price);
-      serverSubtotal += unitPrice * requestedQty;
+      deliveryCharge = serv.deliveryCharge;
     }
 
-    // Delivery calculation: Free shipping above ₹500, else ₹40
-    let deliveryCharge = serverSubtotal >= 500 ? 0 : 40;
-
-    // Server-side promo calculation
-    let discount = 0;
-    if (promo_code) {
-      const code = String(promo_code).toUpperCase().trim();
-      if (code === "USHA10") {
-        discount = Math.round(serverSubtotal * 0.1);
-      } else if (code === "FLAT50") {
-        discount = Math.min(50, serverSubtotal);
-      }
-    }
-
-    const finalAmount = Math.max(1, Math.round(serverSubtotal + deliveryCharge - discount));
+    const finalAmount = Math.max(
+      1,
+      Math.round(
+        validation.subtotal +
+          deliveryCharge -
+          (validation.offerDiscount || 0) -
+          (validation.pointsDiscount || 0)
+      )
+    );
 
     const razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,

@@ -20,6 +20,7 @@ export async function GET() {
         u.created_at,
         COUNT(o.id)::int as total_orders,
         COALESCE(SUM(o.total_amount), 0) as total_spent,
+        (SELECT COUNT(*)::int FROM pets WHERE user_id = u.id) as pets_count,
         (SELECT customer_phone FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as phone,
         (SELECT shipping_address || ', ' || shipping_city || ' - ' || shipping_pincode FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1) as address
       FROM auth_users u

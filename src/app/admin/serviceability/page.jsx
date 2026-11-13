@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 import {
   MapPin,
   Plus,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export default function AdminServiceabilityPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/serviceability");
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -34,14 +34,10 @@ export default function AdminServiceabilityPage() {
   });
 
   useEffect(() => {
-    if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/serviceability";
-      }
-    } else if (!userLoading && user) {
+    if (adminStatus === "authorized") {
       fetchZones();
     }
-  }, [user, userLoading]);
+  }, [adminStatus]);
 
   const fetchZones = async () => {
     try {
@@ -127,15 +123,12 @@ export default function AdminServiceabilityPage() {
     }
   };
 
-  if (userLoading) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA]">
-        <AdminHeader />
-        <div className="py-20 text-center text-xs text-gray-500 font-semibold">
-          Verifying administrator permissions...
-        </div>
-      </div>
-    );
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
   }
 
   return (

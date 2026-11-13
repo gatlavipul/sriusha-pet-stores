@@ -2,10 +2,10 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { Save, Truck, Settings as SettingsIcon } from "lucide-react";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
 export default function AdminSettingsPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/settings");
   const [settings, setSettings] = useState({
     delivery_charge_per_km: "0",
   });
@@ -14,29 +14,10 @@ export default function AdminSettingsPage() {
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
-    if (!userLoading && user) {
-      checkAdminAccess();
-    } else if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/settings";
-      }
-    }
-  }, [user, userLoading]);
-
-  const checkAdminAccess = async () => {
-    try {
-      const response = await fetch("/api/admin/check-role");
-      const data = await response.json();
-      if (!data.isAdmin) {
-        if (typeof window !== "undefined") window.location.href = "/";
-        return;
-      }
+    if (adminStatus === "authorized") {
       fetchSettings();
-    } catch (error) {
-      console.error("Error checking admin access:", error);
-      if (typeof window !== "undefined") window.location.href = "/";
     }
-  };
+  }, [adminStatus]);
 
   const fetchSettings = async () => {
     try {
@@ -73,6 +54,14 @@ export default function AdminSettingsPage() {
     }
     setSaving(false);
   };
+
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">

@@ -9,9 +9,17 @@ export async function GET() {
     }
 
     const cartItems = await sql`
-      SELECT c.*, p.name, p.price, p.image_url, p.stock_quantity 
+      SELECT
+        c.*,
+        p.name,
+        COALESCE(pv.price, p.sale_price, p.price) as price,
+        p.image_url,
+        COALESCE(pv.stock_quantity, p.stock_quantity) as stock_quantity,
+        p.requires_prescription,
+        COALESCE(pv.label, c.variant_name) as variant_name
       FROM cart_items c 
       JOIN products p ON c.product_id = p.id 
+      LEFT JOIN product_variants pv ON c.variant_id = pv.id
       WHERE c.user_id = ${session.user.id}
       ORDER BY c.created_at DESC
     `;
@@ -31,30 +39,35 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { product_id, quantity } = body;
+    const { product_id, quantity, variant_id = null, variant_name = null } = body;
 
     if (!product_id || !quantity || quantity < 1) {
       return Response.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    // Check if item already exists in cart
-    const existing = await sql`
-      SELECT * FROM cart_items 
-      WHERE user_id = ${session.user.id} AND product_id = ${product_id}
-    `;
+    const vid = variant_id ? parseInt(variant_id, 10) : null;
+
+    // Check if item (with same variant) already exists in cart
+    const existing = vid
+      ? await sql`
+          SELECT * FROM cart_items 
+          WHERE user_id = ${session.user.id} AND product_id = ${product_id} AND variant_id = ${vid}
+        `
+      : await sql`
+          SELECT * FROM cart_items 
+          WHERE user_id = ${session.user.id} AND product_id = ${product_id} AND variant_id IS NULL
+        `;
 
     if (existing.length > 0) {
-      // Update quantity
       await sql`
         UPDATE cart_items 
         SET quantity = quantity + ${quantity}, updated_at = NOW()
-        WHERE user_id = ${session.user.id} AND product_id = ${product_id}
+        WHERE id = ${existing[0].id} AND user_id = ${session.user.id}
       `;
     } else {
-      // Insert new item
       await sql`
-        INSERT INTO cart_items (user_id, product_id, quantity)
-        VALUES (${session.user.id}, ${product_id}, ${quantity})
+        INSERT INTO cart_items (user_id, product_id, variant_id, variant_name, quantity)
+        VALUES (${session.user.id}, ${product_id}, ${vid}, ${variant_name}, ${quantity})
       `;
     }
 

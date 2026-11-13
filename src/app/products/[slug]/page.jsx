@@ -27,6 +27,7 @@ export default function ProductDetailPage({ params }) {
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [recentlyViewed, setRecentlyViewed] = useState([]);
   const [selectedVariant, setSelectedVariant] = useState(null);
+  const [selectedVariantObj, setSelectedVariantObj] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
@@ -75,7 +76,12 @@ export default function ProductDetailPage({ params }) {
           }
 
           // Variants
-          if (prod.weight) {
+          if (Array.isArray(prod.variants) && prod.variants.length > 0) {
+            const firstAvailable =
+              prod.variants.find((v) => Number(v.stock_quantity) > 0) || prod.variants[0];
+            setSelectedVariantObj(firstAvailable);
+            setSelectedVariant(firstAvailable.label);
+          } else if (prod.weight) {
             try {
               const parsed = JSON.parse(prod.weight);
               if (Array.isArray(parsed) && parsed.length > 0) {
@@ -139,7 +145,11 @@ export default function ProductDetailPage({ params }) {
       });
 
       if (res.ok) {
-        setReviewSuccess("Thank you for your review! It is now published.");
+        const resData = await res.json();
+        setReviewSuccess(
+          resData.message ||
+            "Thank you for your review! It will be published after moderation."
+        );
         setNewComment("");
         setNewTitle("");
         setShowReviewForm(false);
@@ -165,7 +175,23 @@ export default function ProductDetailPage({ params }) {
     return [];
   };
 
-  const stock = product ? (product.stock_quantity !== undefined ? product.stock_quantity : 15) : 0;
+  const structuredVariants = Array.isArray(product?.variants) ? product.variants : [];
+  const activePrice = selectedVariantObj
+    ? parseFloat(selectedVariantObj.price)
+    : parseFloat(product?.sale_price || product?.price || 0);
+  const activeComparePrice = selectedVariantObj?.compare_price
+    ? parseFloat(selectedVariantObj.compare_price)
+    : product?.compare_price
+    ? parseFloat(product.compare_price)
+    : null;
+
+  const stock = selectedVariantObj
+    ? Number(selectedVariantObj.stock_quantity ?? 0)
+    : product
+    ? product.stock_quantity !== undefined
+      ? product.stock_quantity
+      : 15
+    : 0;
   const isOutOfStock = stock <= 0;
   const isLowStock = stock > 0 && stock <= 5;
 
@@ -175,6 +201,11 @@ export default function ProductDetailPage({ params }) {
     await addToCart(
       {
         ...product,
+        variant_id: selectedVariantObj?.id || null,
+        variant_name: selectedVariantObj?.label || selectedVariant || null,
+        price: activePrice,
+        stock_quantity: stock,
+        requires_prescription: Boolean(product.requires_prescription),
         name: selectedVariant
           ? `${product.name} (${selectedVariant})`
           : product.name,
@@ -191,6 +222,11 @@ export default function ProductDetailPage({ params }) {
     await addToCart(
       {
         ...product,
+        variant_id: selectedVariantObj?.id || null,
+        variant_name: selectedVariantObj?.label || selectedVariant || null,
+        price: activePrice,
+        stock_quantity: stock,
+        requires_prescription: Boolean(product.requires_prescription),
         name: selectedVariant
           ? `${product.name} (${selectedVariant})`
           : product.name,
@@ -338,6 +374,11 @@ export default function ProductDetailPage({ params }) {
                   <span>In Stock (Uppal Store)</span>
                 </span>
               )}
+              {product.requires_prescription && (
+                <span className="rounded-lg bg-purple-50 border border-purple-200 px-2.5 py-1 text-xs font-bold text-purple-700">
+                  Rx Prescription Required
+                </span>
+              )}
             </div>
 
             {/* Title */}
@@ -373,11 +414,11 @@ export default function ProductDetailPage({ params }) {
             <div className="mt-5 rounded-2xl bg-gray-50/70 border border-gray-200/80 p-4">
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl sm:text-4xl font-extrabold text-[#0F172A]">
-                  ₹{parseFloat(product.sale_price || product.price).toFixed(0)}
+                  ₹{activePrice.toFixed(0)}
                 </span>
-                {product.compare_price && (
+                {activeComparePrice && activeComparePrice > activePrice && (
                   <span className="text-base sm:text-lg text-gray-400 line-through">
-                    ₹{parseFloat(product.compare_price).toFixed(0)}
+                    ₹{activeComparePrice.toFixed(0)}
                   </span>
                 )}
               </div>
@@ -387,25 +428,52 @@ export default function ProductDetailPage({ params }) {
             </div>
 
             {/* Variants */}
-            {variants.length > 0 && (
+            {(structuredVariants.length > 0 || variants.length > 0) && (
               <div className="mt-6">
                 <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
                   Select Pack Size / Weight:
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {variants.map((v) => (
-                    <button
-                      key={v}
-                      onClick={() => setSelectedVariant(v)}
-                      className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                        selectedVariant === v
-                          ? "border-2 border-[#2563EB] bg-blue-50/50 text-[#2563EB] shadow-2xs"
-                          : "border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      {v}
-                    </button>
-                  ))}
+                  {structuredVariants.length > 0
+                    ? structuredVariants.map((v) => {
+                        const isSelected = selectedVariantObj?.id === v.id;
+                        const vOut = Number(v.stock_quantity) <= 0;
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedVariantObj(v);
+                              setSelectedVariant(v.label);
+                              setQuantity(1);
+                            }}
+                            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all text-left ${
+                              isSelected
+                                ? "border-2 border-[#2563EB] bg-blue-50/50 text-[#2563EB] shadow-2xs"
+                                : "border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                            } ${vOut ? "opacity-55" : ""}`}
+                          >
+                            <div>{v.label}</div>
+                            <div className="text-[11px] font-semibold text-gray-500">
+                              ₹{parseFloat(v.price).toFixed(0)} • {vOut ? "Out" : `${v.stock_quantity} left`}
+                            </div>
+                          </button>
+                        );
+                      })
+                    : variants.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setSelectedVariant(v)}
+                          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                            selectedVariant === v
+                              ? "border-2 border-[#2563EB] bg-blue-50/50 text-[#2563EB] shadow-2xs"
+                              : "border border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      ))}
                 </div>
               </div>
             )}

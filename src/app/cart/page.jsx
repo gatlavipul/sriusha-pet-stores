@@ -30,29 +30,47 @@ export default function CartPage() {
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState(null);
 
-  const handleApplyCoupon = (e) => {
+  const handleApplyCoupon = async (e) => {
     e.preventDefault();
     const code = couponCode.trim().toUpperCase();
     if (!code) return;
 
-    if (code === "USHA10") {
-      const discount = Math.round(subtotal * 0.1);
-      setAppliedDiscount(discount);
+    try {
+      const res = await fetch("/api/offers/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          items: cart.map((i) => ({
+            product_id: i.product_id || i.id,
+            variant_id: i.variant_id || null,
+            quantity: i.quantity || 1,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setAppliedDiscount(0);
+        if (typeof window !== "undefined") sessionStorage.removeItem("usha_applied_offer");
+        setCouponMessage({
+          type: "error",
+          text: data.error || "Offer code is invalid or not applicable.",
+        });
+        return;
+      }
+
+      setAppliedDiscount(Number(data.discountAmount || 0));
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("usha_applied_offer", data.offer?.code || code);
+      }
       setCouponMessage({
         type: "success",
-        text: `Coupon applied: 10% OFF (₹${discount} saved!)`,
+        text: `${data.offer?.code}: ₹${Number(data.discountAmount || 0).toFixed(0)} saved!`,
       });
-    } else if (code === "FLAT50") {
-      setAppliedDiscount(50);
-      setCouponMessage({
-        type: "success",
-        text: "Coupon applied: ₹50 instant discount!",
-      });
-    } else {
-      setAppliedDiscount(0);
+    } catch {
       setCouponMessage({
         type: "error",
-        text: "Invalid promo code. Try 'USHA10' or 'FLAT50'.",
+        text: "Could not validate offer code right now.",
       });
     }
   };

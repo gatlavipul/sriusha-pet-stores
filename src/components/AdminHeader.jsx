@@ -11,6 +11,11 @@ import {
   Bell,
   BarChart3,
   MapPin,
+  Boxes,
+  Tag,
+  FileText,
+  Star,
+  Gift,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import useAuth from "@/utils/useAuth";
@@ -77,6 +82,13 @@ export default function AdminHeader() {
                 <span>Orders</span>
               </a>
               <a
+                href="/admin/operations"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <MapPin size={15} />
+                <span>Dispatch</span>
+              </a>
+              <a
                 href="/admin/products"
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
               >
@@ -84,11 +96,46 @@ export default function AdminHeader() {
                 <span>Products</span>
               </a>
               <a
+                href="/admin/inventory"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <Boxes size={15} />
+                <span>Inventory</span>
+              </a>
+              <a
+                href="/admin/prescriptions"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <FileText size={15} />
+                <span>Rx</span>
+              </a>
+              <a
+                href="/admin/offers"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <Tag size={15} />
+                <span>Offers</span>
+              </a>
+              <a
+                href="/admin/rewards"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <Gift size={15} />
+                <span>Rewards</span>
+              </a>
+              <a
+                href="/admin/reviews"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <Star size={15} />
+                <span>Reviews</span>
+              </a>
+              <a
                 href="/admin/serviceability"
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
               >
                 <MapPin size={15} />
-                <span>Delivery Zones</span>
+                <span>Zones</span>
               </a>
               <a
                 href="/admin/users"
@@ -202,6 +249,41 @@ export default function AdminHeader() {
             >
               <Package size={16} />
               <span>Products</span>
+            </a>
+            <a
+              href="/admin/inventory"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-800 hover:bg-[#E8F8F0]"
+            >
+              <Boxes size={16} />
+              <span>Inventory &amp; Stock Logs</span>
+            </a>
+            <a
+              href="/admin/prescriptions"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-800 hover:bg-[#E8F8F0]"
+            >
+              <FileText size={16} />
+              <span>Prescriptions (Rx)</span>
+            </a>
+            <a
+              href="/admin/offers"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-800 hover:bg-[#E8F8F0]"
+            >
+              <Tag size={16} />
+              <span>Offers &amp; Promotions</span>
+            </a>
+            <a
+              href="/admin/rewards"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-800 hover:bg-[#E8F8F0]"
+            >
+              <Gift size={16} />
+              <span>Sri Usha Rewards</span>
+            </a>
+            <a
+              href="/admin/reviews"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-800 hover:bg-[#E8F8F0]"
+            >
+              <Star size={16} />
+              <span>Customer Reviews</span>
             </a>
             <a
               href="/admin/serviceability"

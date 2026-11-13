@@ -5,9 +5,11 @@ import { ORDER_STATUS } from "@/utils/orderWorkflow";
 import { checkServiceability } from "@/utils/serviceabilityService";
 import {
   triggerOrderNotifications,
-  checkAndTriggerLowStock,
   NOTIFICATION_TYPES,
 } from "@/utils/notificationService";
+import { validateCheckoutPayload, deductVerifiedOrderStock } from "@/utils/checkoutOrderHelper";
+import { recordOfferRedemption } from "@/utils/offerService";
+import { commitPointRedemption } from "@/utils/loyaltyService";
 import { rateLimiter, getClientIp } from "@/utils/rateLimiter";
 import logger from "@/utils/logger";
 
@@ -74,6 +76,10 @@ export async function POST(request) {
       payment_method,
       items,
       promo_code,
+      redeem_points,
+      prescription_id,
+      gentle_delivery,
+      delivery_instructions,
     } = body;
 
     // 1. Validate customer inputs
@@ -119,55 +125,25 @@ export async function POST(request) {
       }
     }
 
-    // 4. Verify stock and calculate authentic total from database
-    const productIds = items
-      .map((it) => parseInt(it.product_id || it.id, 10))
-      .filter((n) => Number.isInteger(n) && n > 0);
+    // 4. Verify live stock, variant prices, prescriptions, offers & loyalty redemption
+    const validation = await validateCheckoutPayload({
+      items,
+      promoCode: promo_code,
+      userId,
+      customerEmail: cleanEmail,
+      redeemPoints: redeem_points || 0,
+      prescriptionId: prescription_id || null,
+    });
 
-    const dbProducts = await sql`
-      SELECT id, name, price, sale_price, stock_quantity, image_url, is_active
-      FROM products
-      WHERE id = ANY(${productIds}::int[])
-    `;
-
-    const prodMap = new Map();
-    dbProducts.forEach((p) => prodMap.set(p.id, p));
-
-    let verifiedSubtotal = 0;
-    const finalOrderItems = [];
-
-    // Check stock for all items BEFORE making any changes
-    for (const item of items) {
-      const pid = parseInt(item.product_id || item.id, 10);
-      const dbProd = prodMap.get(pid);
-
-      if (!dbProd || !dbProd.is_active) {
-        return Response.json(
-          { error: `Product "${item.name || 'Selected item'}" is currently unavailable.` },
-          { status: 400 }
-        );
-      }
-
-      const qty = Math.max(1, parseInt(item.quantity || 1, 10));
-      if (dbProd.stock_quantity < qty) {
-        return Response.json(
-          {
-            error: `Insufficient stock for "${dbProd.name}". Only ${dbProd.stock_quantity} unit(s) available.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      const unitPrice = parseFloat(dbProd.sale_price || dbProd.price);
-      verifiedSubtotal += unitPrice * qty;
-      finalOrderItems.push({
-        product_id: dbProd.id,
-        name: dbProd.name,
-        price: unitPrice,
-        image_url: dbProd.image_url,
-        quantity: qty,
-      });
+    if (!validation.valid) {
+      return Response.json(
+        { error: validation.error, requiresPrescription: Boolean(validation.requiresPrescription) },
+        { status: validation.status || 400 }
+      );
     }
+
+    const verifiedSubtotal = validation.subtotal;
+    const finalOrderItems = validation.verifiedItems;
 
     // 4.5 Verify Delivery Serviceability to Customer Pincode
     const serviceability = await checkServiceability(cleanPincode, verifiedSubtotal);
@@ -182,46 +158,47 @@ export async function POST(request) {
       );
     }
 
-    // Atomically decrement stock & track low-stock warnings
-    for (const item of finalOrderItems) {
-      const updateRes = await sql`
-        UPDATE products 
-        SET stock_quantity = GREATEST(0, stock_quantity - ${item.quantity}), updated_at = NOW()
-        WHERE id = ${item.product_id}
-        RETURNING stock_quantity
-      `;
-      const remainingStock = updateRes[0]?.stock_quantity ?? 0;
-      await checkAndTriggerLowStock(item.product_id, remainingStock, item.name);
-    }
-
     const deliveryCharge = serviceability.deliveryCharge;
-    let discount = 0;
-    if (promo_code) {
-      const code = String(promo_code).toUpperCase().trim();
-      if (code === "USHA10") discount = Math.round(verifiedSubtotal * 0.1);
-      else if (code === "FLAT50") discount = Math.min(50, verifiedSubtotal);
-    }
+    const discount = validation.offerDiscount || 0;
+    const pointsDiscount = validation.pointsDiscount || 0;
+    const pointsRedeemed = validation.pointsToRedeem || 0;
 
-    const finalTotal = Math.max(1, Math.round(verifiedSubtotal + deliveryCharge - discount));
+    const finalTotal = Math.max(
+      1,
+      Math.round(verifiedSubtotal + deliveryCharge - discount - pointsDiscount)
+    );
 
     // For COD: payment_status is strictly 'pending', status is 'placed'
     // Server enforces payment security: client cannot pass 'paid' for COD orders
     const paymentMethod = payment_method === "cod" ? "cod" : "cod";
     const paymentStatus = "pending";
-    const orderStatus = ORDER_STATUS.PLACED;
+    const orderStatus =
+      validation.requiresPrescription && validation.verifiedPrescription?.status !== "approved"
+        ? ORDER_STATUS.PRESCRIPTION_REVIEW
+        : ORDER_STATUS.PLACED;
 
     // 5. Create Order
+    const deliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
+    const isGentleDelivery = Boolean(gentle_delivery);
+    const cleanInstructions = sanitizeText(delivery_instructions || "", 300) || null;
+
     const newOrders = await sql`
       INSERT INTO orders (
         user_id, customer_name, customer_email, customer_phone,
         shipping_address, shipping_city, shipping_pincode,
         total_amount, payment_intent_id, payment_status, status,
-        delivery_distance, delivery_charge, payment_method
+        delivery_distance, delivery_charge, payment_method,
+        offer_code, offer_discount, points_redeemed, points_discount,
+        prescription_required, prescription_status,
+        delivery_otp, gentle_delivery, delivery_instructions
       ) VALUES (
         ${userId}, ${cleanName}, ${cleanEmail}, ${cleanPhone},
         ${cleanAddress}, ${cleanCity}, ${cleanPincode},
         ${finalTotal}, NULL, ${paymentStatus}, ${orderStatus},
-        0, ${deliveryCharge}, ${paymentMethod}
+        0, ${deliveryCharge}, ${paymentMethod},
+        ${validation.offer?.code || null}, ${discount}, ${pointsRedeemed}, ${pointsDiscount},
+        ${validation.requiresPrescription}, ${validation.verifiedPrescription?.status || null},
+        ${deliveryOtp}, ${isGentleDelivery}, ${cleanInstructions}
       )
       RETURNING *
     `;
@@ -232,11 +209,43 @@ export async function POST(request) {
     await sql`UPDATE orders SET order_number = ${orderNumber} WHERE id = ${order.id}`;
     order.order_number = orderNumber;
 
-    // 6. Insert order items
+    // 6. Insert order items & atomically deduct stock with movement history
     for (const item of finalOrderItems) {
       await sql`
-        INSERT INTO order_items (order_id, product_id, product_name, product_image, quantity, price)
-        VALUES (${order.id}, ${item.product_id}, ${item.name}, ${item.image_url}, ${item.quantity}, ${item.price})
+        INSERT INTO order_items (order_id, product_id, variant_id, variant_name, product_name, product_image, quantity, price)
+        VALUES (${order.id}, ${item.product_id}, ${item.variant_id || null}, ${item.variant_name || null}, ${item.name}, ${item.image_url}, ${item.quantity}, ${item.price})
+      `;
+    }
+
+    await deductVerifiedOrderStock({
+      verifiedItems: finalOrderItems,
+      orderId: order.id,
+      userId,
+      userName: cleanName,
+    });
+
+    if (validation.offer?.id) {
+      await recordOfferRedemption({
+        offerId: validation.offer.id,
+        userId,
+        customerEmail: cleanEmail,
+        orderId: order.id,
+        discountAmount: discount,
+      });
+    }
+
+    if (pointsRedeemed > 0) {
+      await commitPointRedemption({
+        userId,
+        orderId: order.id,
+        pointsToRedeem: pointsRedeemed,
+        orderNumber,
+      });
+    }
+
+    if (validation.verifiedPrescription?.id) {
+      await sql`
+        UPDATE prescriptions SET order_id = ${order.id} WHERE id = ${validation.verifiedPrescription.id}
       `;
     }
 

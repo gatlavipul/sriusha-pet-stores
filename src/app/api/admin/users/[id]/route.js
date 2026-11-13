@@ -3,6 +3,69 @@ import { requireAdmin } from "@/app/api/utils/security";
 
 const VALID_ROLES = ["admin", "delivery_partner", "customer"];
 
+export async function GET(_request, { params }) {
+  try {
+    const authResult = await requireAdmin();
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
+    }
+
+    const userId = parseInt(params?.id, 10);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return Response.json({ error: "Invalid user ID" }, { status: 400 });
+    }
+
+    const userRows = await sql`
+      SELECT id, name, email, role, created_at, pet_onboarding_completed, clerk_user_id
+      FROM auth_users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+
+    if (!userRows || userRows.length === 0) {
+      return Response.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const [orders, pets] = await Promise.all([
+      sql`
+        SELECT
+          o.id,
+          COALESCE(o.order_number, 'SU-2026-' || LPAD(o.id::text, 4, '0')) as order_number,
+          o.total_amount,
+          o.status,
+          o.payment_method,
+          o.payment_status,
+          o.created_at,
+          COUNT(oi.id)::int as item_count
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.user_id = ${userId}
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+        LIMIT 25
+      `,
+      sql`
+        SELECT id, name, type, breed, age, preferences, image_url, created_at
+        FROM pets
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `,
+    ]);
+
+    return Response.json({
+      user: userRows[0],
+      orders: orders || [],
+      pets: pets || [],
+    });
+  } catch (error) {
+    console.error("Error fetching admin user details:", error);
+    return Response.json(
+      { error: "Failed to load user details" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(request, { params }) {
   try {
     const authResult = await requireAdmin();

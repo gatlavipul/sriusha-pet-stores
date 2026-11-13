@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 import {
   Bell,
   CheckCircle,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 export default function AdminNotificationsPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/notifications");
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -25,14 +25,10 @@ export default function AdminNotificationsPage() {
   const [markingId, setMarkingId] = useState(null);
 
   useEffect(() => {
-    if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/notifications";
-      }
-    } else if (!userLoading && user) {
+    if (adminStatus === "authorized") {
       fetchNotifications();
     }
-  }, [user, userLoading, filterType, unreadOnly]);
+  }, [adminStatus, filterType, unreadOnly]);
 
   const fetchNotifications = async () => {
     try {
@@ -127,15 +123,12 @@ export default function AdminNotificationsPage() {
     }
   };
 
-  if (userLoading) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA]">
-        <AdminHeader />
-        <div className="py-20 text-center text-xs text-gray-500 font-semibold">
-          Verifying administrator permissions...
-        </div>
-      </div>
-    );
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
   }
 
   return (

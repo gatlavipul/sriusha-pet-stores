@@ -104,8 +104,10 @@ export async function POST(request) {
       stock_quantity,
       brand,
       weight,
+      requires_prescription,
       is_active,
       images,
+      variants,
     } = body;
 
     const trimmedName = sanitizeText(name, 255);
@@ -130,7 +132,7 @@ export async function POST(request) {
       INSERT INTO products (
         name, slug, description, price, compare_price, sale_price,
         image_url, category_id, sub_category_id, stock_quantity,
-        brand, weight, is_active
+        brand, weight, requires_prescription, is_active
       )
       VALUES (
         ${trimmedName}, ${cleanSlug}, ${description || null}, ${parsedPrice},
@@ -141,12 +143,39 @@ export async function POST(request) {
         ${parsedStock >= 0 ? parsedStock : 0},
         ${brand ? sanitizeText(brand, 100) : null},
         ${weight ? sanitizeText(weight, 50) : null},
+        ${Boolean(requires_prescription)},
         ${is_active !== undefined ? Boolean(is_active) : true}
       )
       RETURNING *
     `;
 
     const product = products[0];
+
+    // Insert package variants if provided
+    if (Array.isArray(variants) && variants.length > 0) {
+      let totalVariantStock = 0;
+      for (let i = 0; i < variants.length; i++) {
+        const v = variants[i];
+        const label = String(v?.label || "").trim();
+        const vPrice = parseFloat(v?.price || 0);
+        const vStock = Math.max(0, parseInt(v?.stock_quantity || 0, 10) || 0);
+        if (!label || !Number.isFinite(vPrice) || vPrice <= 0) continue;
+        totalVariantStock += vStock;
+        await sql`
+          INSERT INTO product_variants (
+            product_id, label, price, compare_price, stock_quantity, sku, is_active, sort_order
+          ) VALUES (
+            ${product.id}, ${label}, ${vPrice},
+            ${v.compare_price ? parseFloat(v.compare_price) : null},
+            ${vStock}, ${v.sku ? String(v.sku).trim() : null}, ${v.is_active !== false}, ${i}
+          )
+        `;
+      }
+      if (totalVariantStock > 0) {
+        await sql`UPDATE products SET stock_quantity = ${totalVariantStock} WHERE id = ${product.id}`;
+        product.stock_quantity = totalVariantStock;
+      }
+    }
 
     // Insert product images if provided
     if (images && Array.isArray(images) && images.length > 0) {

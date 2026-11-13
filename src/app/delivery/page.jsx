@@ -41,6 +41,7 @@ export default function DeliveryPartnerPage() {
   const [selectedReason, setSelectedReason] = useState(FAILURE_REASONS[0]);
   const [customReason, setCustomReason] = useState("");
   const [submittingFailure, setSubmittingFailure] = useState(false);
+  const [otpInputs, setOtpInputs] = useState({});
 
   useEffect(() => {
     if (!userLoading && !user) {
@@ -74,16 +75,24 @@ export default function DeliveryPartnerPage() {
     }
   };
 
-  const updateStage = async (orderId, newStatus) => {
+  const updateStage = async (orderId, newStatus, otpValue) => {
+    if (newStatus === "delivered" && (!otpValue || String(otpValue).trim().length !== 4)) {
+      alert("Please enter the customer's 4-digit Delivery OTP before confirming delivery.");
+      return;
+    }
     const actionLabel = newStatus === "out_for_delivery" ? "start delivery for" : "mark as delivered";
     if (!confirm(`Are you sure you want to ${actionLabel} this order?`)) return;
 
     setUpdatingId(orderId);
     try {
+      const payload = { status: newStatus };
+      if (newStatus === "delivered" && otpValue) {
+        payload.delivery_otp = String(otpValue).trim();
+      }
       const res = await fetch(`/api/delivery/orders/${orderId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -430,6 +439,16 @@ export default function DeliveryPartnerPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 pt-1">
+                      {order.gentle_delivery && (
+                        <div className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold text-amber-900">
+                          🔕 GENTLE DELIVERY: Don&apos;t ring the bell — call customer on arrival
+                        </div>
+                      )}
+                      {order.delivery_instructions && (
+                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold text-gray-700">
+                          Note: {order.delivery_instructions}
+                        </div>
+                      )}
                       {order.customer_phone && (
                         <a
                           href={`tel:${order.customer_phone}`}
@@ -486,10 +505,29 @@ export default function DeliveryPartnerPage() {
 
                     {isOut && (
                       <div className="space-y-2">
+                        <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/70 p-2">
+                          <label className="text-[11px] font-bold text-blue-900 whitespace-nowrap">
+                            Customer OTP:
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={4}
+                            value={otpInputs[order.id] || ""}
+                            onChange={(e) =>
+                              setOtpInputs((prev) => ({
+                                ...prev,
+                                [order.id]: e.target.value.replace(/\D/g, "").slice(0, 4),
+                              }))
+                            }
+                            placeholder="4-digit OTP"
+                            className="w-28 rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-center text-xs font-extrabold tracking-widest text-gray-900 outline-none focus:border-[#2563EB]"
+                          />
+                        </div>
                         <button
                           type="button"
                           disabled={updatingId === order.id}
-                          onClick={() => updateStage(order.id, "delivered")}
+                          onClick={() => updateStage(order.id, "delivered", otpInputs[order.id])}
                           className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all disabled:opacity-50"
                         >
                           <CheckCircle size={16} />

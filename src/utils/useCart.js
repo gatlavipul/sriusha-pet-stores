@@ -80,6 +80,9 @@ export default function useCart() {
           const serverItems = (data.cartItems || []).map((ci) => ({
             id: ci.id,
             product_id: ci.product_id,
+            variant_id: ci.variant_id || null,
+            variant_name: ci.variant_name || null,
+            requires_prescription: Boolean(ci.requires_prescription),
             name: ci.name,
             price: parseFloat(ci.price || 0),
             image_url: ci.image_url,
@@ -122,9 +125,13 @@ export default function useCart() {
 
   const addToCart = async (product, quantity = 1) => {
     const productId = product.id || product.product_id;
+    const variantId = product.variant_id || null;
+    const variantName = product.variant_name || null;
     const current = getLocalCart();
     const existingIndex = current.findIndex(
-      (i) => (i.product_id || i.id) === productId
+      (i) =>
+        (i.product_id || i.id) === productId &&
+        (i.variant_id || null) === variantId
     );
 
     let updated;
@@ -135,8 +142,11 @@ export default function useCart() {
       updated = [
         ...current,
         {
-          id: `local_${productId}_${Date.now()}`,
+          id: `local_${productId}_${variantId || "base"}_${Date.now()}`,
           product_id: productId,
+          variant_id: variantId,
+          variant_name: variantName,
+          requires_prescription: Boolean(product.requires_prescription),
           name: product.name,
           price: parseFloat(product.price || 0),
           image_url: product.image_url,
@@ -154,7 +164,12 @@ export default function useCart() {
         await fetch("/api/cart", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ product_id: productId, quantity }),
+          body: JSON.stringify({
+            product_id: productId,
+            variant_id: variantId,
+            variant_name: variantName,
+            quantity,
+          }),
         });
         refreshCart();
       } catch (err) {

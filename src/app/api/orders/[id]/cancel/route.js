@@ -2,6 +2,7 @@ import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
 import { sanitizeText } from "@/app/api/utils/security";
 import { isCancellableByCustomer, ORDER_STATUS } from "@/utils/orderWorkflow";
+import { restoreStockForOrder } from "@/utils/stockService";
 
 export async function POST(request, { params }) {
   try {
@@ -50,19 +51,12 @@ export async function POST(request, { params }) {
       );
     }
 
-    // 1. Restore product inventory stock ONLY if not already restored (Idempotency Protection)
-    if (!order.stock_restored) {
-      const items = await sql`SELECT product_id, quantity FROM order_items WHERE order_id = ${id}`;
-      for (const item of items) {
-        if (item.product_id && item.quantity > 0) {
-          await sql`
-            UPDATE products 
-            SET stock_quantity = stock_quantity + ${item.quantity}, updated_at = NOW()
-            WHERE id = ${item.product_id}
-          `;
-        }
-      }
-    }
+    // 1. Restore product/variant inventory stock ONLY if not already restored (Idempotency Protection)
+    await restoreStockForOrder({
+      orderId: Number(id),
+      userId: session?.user?.id ? Number(session.user.id) : null,
+      userName: session?.user?.name || "Customer",
+    });
 
     // 2. Determine refund state if paid online
     const newPaymentStatus = order.payment_status === "paid" ? "refunded" : order.payment_status;
@@ -71,7 +65,7 @@ export async function POST(request, { params }) {
       255
     );
 
-    // 3. Update order record with stock_restored flag
+    // 3. Update order record
     const updated = await sql`
       UPDATE orders 
       SET 

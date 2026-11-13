@@ -1,9 +1,15 @@
 import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
+import { getAuthoritativeSession } from "@/utils/clerkServer";
 
 export async function GET(request, { params }) {
   try {
-    const session = await auth();
+    let session = await auth();
+    if (!session?.user?.id && request) {
+      const clerkSession = await getAuthoritativeSession(request);
+      if (clerkSession?.user) session = clerkSession;
+    }
+
     const { id } = params;
     const { searchParams } = new URL(request.url);
     const guestEmail = searchParams.get("email");
@@ -65,12 +71,31 @@ export async function GET(request, { params }) {
       ORDER BY h.created_at ASC
     `;
 
+    // Fetch assigned delivery partner details if present
+    let deliveryPartner = null;
+    if (order.assigned_delivery_partner_id) {
+      const partnerRows = await sql`
+        SELECT id, name, phone, email 
+        FROM auth_users 
+        WHERE id = ${order.assigned_delivery_partner_id} 
+        LIMIT 1
+      `;
+      if (partnerRows && partnerRows.length > 0) {
+        deliveryPartner = {
+          id: partnerRows[0].id,
+          name: partnerRows[0].name || "Sri Usha Express Rider",
+          phone: partnerRows[0].phone || "+919440274418",
+        };
+      }
+    }
+
     return Response.json({
       order: {
         ...order,
         order_number: order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`,
         items,
         history,
+        deliveryPartner,
       },
     });
   } catch (error) {

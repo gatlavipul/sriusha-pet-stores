@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import MobileBottomNav from '@/components/MobileBottomNav';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,7 +15,10 @@ const queryClient = new QueryClient({
 export default function RootLayout({children}) {
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <div className="pb-16 md:pb-0">
+        {children}
+      </div>
+      <MobileBottomNav />
     </QueryClientProvider>
   );
 }

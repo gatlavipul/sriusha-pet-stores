@@ -1,9 +1,19 @@
 import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
+import { getAuthoritativeSession } from "@/utils/clerkServer";
 
-export async function GET() {
+export async function GET(req) {
   try {
-    const session = await auth();
+    let session = await auth();
+
+    // If NextAuth session is absent, verify against authoritative Clerk session token
+    if (!session?.user?.id && req) {
+      const clerkSession = await getAuthoritativeSession(req);
+      if (clerkSession?.user) {
+        session = clerkSession;
+      }
+    }
+
     if (!session?.user?.id) {
       return Response.json({
         authenticated: false,

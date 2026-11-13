@@ -18,10 +18,10 @@ import {
   Package,
   AlertTriangle,
 } from "lucide-react";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
 export default function AdminProductsPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/products");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -68,37 +68,20 @@ export default function AdminProductsPage() {
     stock_quantity: "",
     weight: "",
     is_active: true,
+    requires_prescription: false,
   });
   const [weightVariants, setWeightVariants] = useState([]);
+  const [variantRows, setVariantRows] = useState([]);
   const [newVariant, setNewVariant] = useState("");
   const [uploadedImages, setUploadedImages] = useState([]);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
-    if (!userLoading && user) {
-      checkAdminAccess();
-    } else if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/products";
-      }
-    }
-  }, [user, userLoading]);
-
-  const checkAdminAccess = async () => {
-    try {
-      const response = await fetch("/api/admin/check-role");
-      const data = await response.json();
-      if (!data.isAdmin) {
-        if (typeof window !== "undefined") window.location.href = "/";
-        return;
-      }
+    if (adminStatus === "authorized") {
       fetchProducts();
       fetchCategories();
-    } catch (error) {
-      console.error("Error checking admin access:", error);
-      if (typeof window !== "undefined") window.location.href = "/";
     }
-  };
+  }, [adminStatus]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -273,8 +256,10 @@ export default function AdminProductsPage() {
       stock_quantity: "",
       weight: "",
       is_active: true,
+      requires_prescription: false,
     });
     setWeightVariants([]);
+    setVariantRows([]);
     setUploadedImages([]);
     setError(null);
     setEditingProduct(null);
@@ -308,7 +293,20 @@ export default function AdminProductsPage() {
         stock_quantity: fullProduct.stock_quantity || "",
         weight: fullProduct.weight || "",
         is_active: fullProduct.is_active !== false,
+        requires_prescription: Boolean(fullProduct.requires_prescription),
       });
+
+      if (Array.isArray(fullProduct.variants)) {
+        setVariantRows(
+          fullProduct.variants.map((v) => ({
+            label: v.label || "",
+            price: String(v.price ?? ""),
+            compare_price: v.compare_price ? String(v.compare_price) : "",
+            stock_quantity: String(v.stock_quantity ?? 0),
+            sku: v.sku || "",
+          }))
+        );
+      }
 
       if (fullProduct.category_id) {
         await fetchSubCategories(fullProduct.category_id);
@@ -343,6 +341,17 @@ export default function AdminProductsPage() {
     try {
       const payload = {
         ...formData,
+        requires_prescription: Boolean(formData.requires_prescription),
+        variants: variantRows
+          .filter((v) => v.label.trim() && Number(v.price) > 0)
+          .map((v, idx) => ({
+            label: v.label.trim(),
+            price: Number(v.price),
+            compare_price: v.compare_price ? Number(v.compare_price) : null,
+            stock_quantity: Math.max(0, parseInt(v.stock_quantity || "0", 10) || 0),
+            sku: v.sku?.trim() || null,
+            sort_order: idx,
+          })),
         weight: weightVariants.length > 0 ? weightVariants.join(",") : formData.weight || null,
         images: uploadedImages.map((img, i) => ({
           url: img.url,
@@ -445,8 +454,16 @@ export default function AdminProductsPage() {
     }
   };
 
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
+  }
+
   // --- Loading State ---
-  if (userLoading || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#F8F9FA]">
         <AdminHeader />
@@ -1081,6 +1098,112 @@ export default function AdminProductsPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Package Size / Weight Variations (Price & Stock per Pack) */}
+              <div className="rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-[#374151]">
+                      Package Size &amp; Weight Variants
+                    </p>
+                    <p className="text-xs text-[#6B7280]">
+                      Add pack sizes (e.g. 1 kg, 3 kg, 10 kg) with separate price &amp; stock.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVariantRows([
+                        ...variantRows,
+                        { label: "", price: "", compare_price: "", stock_quantity: "0", sku: "" },
+                      ])
+                    }
+                    className="rounded-lg bg-[#0066CC] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0052A3]"
+                  >
+                    + Add Pack Size
+                  </button>
+                </div>
+
+                {variantRows.length > 0 && (
+                  <div className="space-y-2">
+                    {variantRows.map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Label (e.g. 1 kg)"
+                          value={row.label}
+                          onChange={(e) => {
+                            const next = [...variantRows];
+                            next[idx] = { ...next[idx], label: e.target.value };
+                            setVariantRows(next);
+                          }}
+                          className="col-span-4 rounded-lg border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Price ₹"
+                          value={row.price}
+                          onChange={(e) => {
+                            const next = [...variantRows];
+                            next[idx] = { ...next[idx], price: e.target.value };
+                            setVariantRows(next);
+                          }}
+                          className="col-span-3 rounded-lg border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Stock"
+                          value={row.stock_quantity}
+                          onChange={(e) => {
+                            const next = [...variantRows];
+                            next[idx] = { ...next[idx], stock_quantity: e.target.value };
+                            setVariantRows(next);
+                          }}
+                          className="col-span-2 rounded-lg border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          placeholder="SKU (opt)"
+                          value={row.sku}
+                          onChange={(e) => {
+                            const next = [...variantRows];
+                            next[idx] = { ...next[idx], sku: e.target.value };
+                            setVariantRows(next);
+                          }}
+                          className="col-span-2 rounded-lg border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setVariantRows(variantRows.filter((_, i) => i !== idx))}
+                          className="col-span-1 text-center text-xs font-bold text-rose-600 hover:text-rose-800"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Prescription Required Toggle */}
+              <div className="flex items-center justify-between rounded-lg border border-purple-200 bg-purple-50/60 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-[#374151]">
+                    Veterinary Prescription Required (Rx)
+                  </p>
+                  <p className="text-xs text-[#6B7280]">
+                    Customers must upload a valid prescription at checkout to order this item.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(formData.requires_prescription)}
+                  onChange={(e) =>
+                    setFormData({ ...formData, requires_prescription: e.target.checked })
+                  }
+                  className="h-5 w-5 accent-[#0066CC]"
+                />
               </div>
 
               {/* Status Toggle */}

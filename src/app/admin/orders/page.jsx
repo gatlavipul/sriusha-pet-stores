@@ -13,10 +13,10 @@ import {
   AlertTriangle,
   UserCheck,
 } from "lucide-react";
-import useUser from "@/utils/useUser";
+import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
 export default function AdminOrdersPage() {
-  const { data: user, loading: userLoading } = useUser();
+  const { status: adminStatus, role: adminRole, email: adminEmail } = useAdminAccess("/admin/orders");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -24,41 +24,21 @@ export default function AdminOrdersPage() {
   const [orderHistory, setOrderHistory] = useState([]);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("status") || "all";
+    }
+    return "all";
+  });
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [cancelReason, setCancelReason] = useState("");
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
 
   useEffect(() => {
-    if (!userLoading && user) {
-      checkAdminAccess();
-    } else if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/admin/orders";
-      }
-    }
-  }, [user, userLoading]);
-
-  const checkAdminAccess = async () => {
-    try {
-      const response = await fetch("/api/admin/check-role");
-      const data = await response.json();
-
-      if (!data.isAdmin) {
-        if (typeof window !== "undefined") {
-          window.location.href = "/";
-        }
-        return;
-      }
-
+    if (adminStatus === "authorized") {
       fetchOrders();
-    } catch (error) {
-      console.error("Error checking admin access:", error);
-      if (typeof window !== "undefined") {
-        window.location.href = "/";
-      }
     }
-  };
+  }, [adminStatus]);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -177,16 +157,12 @@ export default function AdminOrdersPage() {
     return "bg-gray-50 text-gray-800 border-gray-200";
   };
 
-  if (userLoading) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA]">
-        <AdminHeader />
-        <div className="mx-auto max-w-7xl px-4 py-16 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mx-auto mb-3" />
-          <p className="text-xs text-gray-500 font-medium">Verifying administrator access...</p>
-        </div>
-      </div>
-    );
+  if (adminStatus === "checking" || adminStatus === "unauthenticated") {
+    return <AdminAuthChecking />;
+  }
+
+  if (adminStatus === "forbidden") {
+    return <AdminAccessRestricted role={adminRole} email={adminEmail} />;
   }
 
   return (

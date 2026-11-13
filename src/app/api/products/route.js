@@ -36,7 +36,33 @@ export async function GET(request) {
     params.push(limit, offset);
 
     const products = await sql(query, params);
-    return Response.json({ products });
+
+    if (products.length > 0) {
+      const productIds = products.map((p) => p.id);
+      const variants = await sql`
+        SELECT id, product_id, label, price, compare_price, stock_quantity, sku, sort_order
+        FROM product_variants
+        WHERE product_id = ANY(${productIds}) AND is_active = true
+        ORDER BY sort_order ASC, id ASC
+      `;
+      const byProduct = new Map();
+      for (const v of variants) {
+        if (!byProduct.has(v.product_id)) byProduct.set(v.product_id, []);
+        byProduct.get(v.product_id).push(v);
+      }
+      for (const p of products) {
+        p.variants = byProduct.get(p.id) || [];
+      }
+    }
+
+    return Response.json(
+      { products },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error fetching products:", error);
     return Response.json(

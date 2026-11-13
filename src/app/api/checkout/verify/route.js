@@ -6,9 +6,11 @@ import { ORDER_STATUS } from "@/utils/orderWorkflow";
 import { checkServiceability } from "@/utils/serviceabilityService";
 import {
   triggerOrderNotifications,
-  checkAndTriggerLowStock,
   NOTIFICATION_TYPES,
 } from "@/utils/notificationService";
+import { validateCheckoutPayload, deductVerifiedOrderStock } from "@/utils/checkoutOrderHelper";
+import { recordOfferRedemption } from "@/utils/offerService";
+import { commitPointRedemption } from "@/utils/loyaltyService";
 import logger from "@/utils/logger";
 
 export async function POST(request) {
@@ -29,6 +31,10 @@ export async function POST(request) {
       delivery_charge,
       items,
       promo_code,
+      redeem_points,
+      prescription_id,
+      gentle_delivery,
+      delivery_instructions,
     } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -116,56 +122,22 @@ export async function POST(request) {
       }
     }
 
-    // 5. Verify live products, compute total, check & decrement stock atomically
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return Response.json({ error: "No items to order." }, { status: 400 });
+    // 5. Verify live products, variant prices, prescriptions, offers & loyalty redemption
+    const validation = await validateCheckoutPayload({
+      items,
+      promoCode: promo_code,
+      userId,
+      customerEmail: cleanEmail,
+      redeemPoints: redeem_points || 0,
+      prescriptionId: prescription_id || null,
+    });
+
+    if (!validation.valid) {
+      return Response.json({ error: validation.error }, { status: validation.status || 400 });
     }
 
-    const productIds = items
-      .map((it) => parseInt(it.product_id || it.id, 10))
-      .filter((n) => Number.isInteger(n) && n > 0);
-
-    const dbProducts = await sql`
-      SELECT id, name, price, sale_price, stock_quantity, image_url
-      FROM products
-      WHERE id = ANY(${productIds}::int[])
-    `;
-
-    const prodMap = new Map();
-    dbProducts.forEach((p) => prodMap.set(p.id, p));
-
-    let verifiedSubtotal = 0;
-    const finalOrderItems = [];
-
-    for (const item of items) {
-      const pid = parseInt(item.product_id || item.id, 10);
-      const dbProd = prodMap.get(pid);
-      if (!dbProd) {
-        return Response.json({ error: `Product ID ${pid} not found.` }, { status: 400 });
-      }
-
-      const qty = Math.max(1, parseInt(item.quantity || 1, 10));
-      const unitPrice = parseFloat(dbProd.sale_price || dbProd.price);
-
-      verifiedSubtotal += unitPrice * qty;
-      finalOrderItems.push({
-        product_id: dbProd.id,
-        name: dbProd.name,
-        price: unitPrice,
-        image_url: dbProd.image_url,
-        quantity: qty,
-      });
-
-      // Atomically decrement stock
-      const updateRes = await sql`
-        UPDATE products 
-        SET stock_quantity = GREATEST(0, stock_quantity - ${qty}), updated_at = NOW()
-        WHERE id = ${dbProd.id}
-        RETURNING stock_quantity
-      `;
-      const remainingStock = updateRes[0]?.stock_quantity ?? 0;
-      await checkAndTriggerLowStock(dbProd.id, remainingStock, dbProd.name);
-    }
+    const verifiedSubtotal = validation.subtotal;
+    const finalOrderItems = validation.verifiedItems;
 
     // 5.5 Verify Delivery Serviceability
     const serviceability = await checkServiceability(cleanPincode, verifiedSubtotal);
@@ -181,29 +153,44 @@ export async function POST(request) {
     }
 
     const validDeliveryCharge = serviceability.deliveryCharge;
-    let promoDiscount = 0;
-    if (promo_code) {
-      const code = String(promo_code).toUpperCase().trim();
-      if (code === "USHA10") promoDiscount = Math.round(verifiedSubtotal * 0.1);
-      else if (code === "FLAT50") promoDiscount = Math.min(50, verifiedSubtotal);
-    }
+    const promoDiscount = validation.offerDiscount || 0;
+    const pointsDiscount = validation.pointsDiscount || 0;
+    const pointsRedeemed = validation.pointsToRedeem || 0;
 
-    const calculatedTotal = Math.max(1, Math.round(verifiedSubtotal + validDeliveryCharge - promoDiscount));
+    const calculatedTotal = Math.max(
+      1,
+      Math.round(verifiedSubtotal + validDeliveryCharge - promoDiscount - pointsDiscount)
+    );
+
+    const initialOrderStatus =
+      validation.requiresPrescription && validation.verifiedPrescription?.status !== "approved"
+        ? "prescription_review"
+        : "confirmed";
 
     // 6. Generate order and unique order number
+    const deliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
+    const isGentleDelivery = Boolean(gentle_delivery);
+    const cleanInstructions = sanitizeText(delivery_instructions || "", 300) || null;
+
     const newOrders = await sql`
       INSERT INTO orders (
         user_id, customer_name, customer_email, customer_phone,
         shipping_address, shipping_city, shipping_pincode,
         total_amount, payment_intent_id, payment_status, status,
         delivery_distance, delivery_charge, payment_method,
-        razorpay_order_id, razorpay_signature
+        razorpay_order_id, razorpay_signature,
+        offer_code, offer_discount, points_redeemed, points_discount,
+        prescription_required, prescription_status,
+        delivery_otp, gentle_delivery, delivery_instructions
       ) VALUES (
         ${userId}, ${cleanName}, ${cleanEmail}, ${cleanPhone},
         ${cleanAddress}, ${cleanCity || "Hyderabad"}, ${cleanPincode},
-        ${calculatedTotal}, ${razorpay_payment_id}, 'paid', 'confirmed',
+        ${calculatedTotal}, ${razorpay_payment_id}, 'paid', ${initialOrderStatus},
         0, ${validDeliveryCharge}, 'razorpay',
-        ${razorpay_order_id}, ${razorpay_signature}
+        ${razorpay_order_id}, ${razorpay_signature},
+        ${validation.offer?.code || null}, ${promoDiscount}, ${pointsRedeemed}, ${pointsDiscount},
+        ${validation.requiresPrescription}, ${validation.verifiedPrescription?.status || null},
+        ${deliveryOtp}, ${isGentleDelivery}, ${cleanInstructions}
       )
       RETURNING *
     `;
@@ -214,11 +201,43 @@ export async function POST(request) {
     await sql`UPDATE orders SET order_number = ${orderNumber} WHERE id = ${order.id}`;
     order.order_number = orderNumber;
 
-    // 7. Insert order items
+    // 7. Insert order items & deduct stock with movement history
     for (const item of finalOrderItems) {
       await sql`
-        INSERT INTO order_items (order_id, product_id, product_name, product_image, quantity, price)
-        VALUES (${order.id}, ${item.product_id}, ${item.name}, ${item.image_url}, ${item.quantity}, ${item.price})
+        INSERT INTO order_items (order_id, product_id, variant_id, variant_name, product_name, product_image, quantity, price)
+        VALUES (${order.id}, ${item.product_id}, ${item.variant_id || null}, ${item.variant_name || null}, ${item.name}, ${item.image_url}, ${item.quantity}, ${item.price})
+      `;
+    }
+
+    await deductVerifiedOrderStock({
+      verifiedItems: finalOrderItems,
+      orderId: order.id,
+      userId,
+      userName: cleanName,
+    });
+
+    if (validation.offer?.id) {
+      await recordOfferRedemption({
+        offerId: validation.offer.id,
+        userId,
+        customerEmail: cleanEmail,
+        orderId: order.id,
+        discountAmount: promoDiscount,
+      });
+    }
+
+    if (pointsRedeemed > 0) {
+      await commitPointRedemption({
+        userId,
+        orderId: order.id,
+        pointsToRedeem: pointsRedeemed,
+        orderNumber,
+      });
+    }
+
+    if (validation.verifiedPrescription?.id) {
+      await sql`
+        UPDATE prescriptions SET order_id = ${order.id} WHERE id = ${validation.verifiedPrescription.id}
       `;
     }
 
