@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import MobileBottomNav from '@/components/MobileBottomNav';
+import FloatingCartBar from '@/components/FloatingCartBar';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,12 +13,13 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function RootLayout({children}) {
+export default function RootLayout({ children }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="pb-16 md:pb-0">
+      <div className="min-h-screen pb-28 md:pb-10">
         {children}
       </div>
+      <FloatingCartBar />
       <MobileBottomNav />
     </QueryClientProvider>
   );
