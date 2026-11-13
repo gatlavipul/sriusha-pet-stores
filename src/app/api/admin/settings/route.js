@@ -1,16 +1,11 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/app/api/utils/security";
 
-export async function GET() {
+export async function GET(req) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const currentUser = await sql`SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1`;
-    if (currentUser[0]?.role !== "admin") {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
+    const authResult = await requireAdmin(req);
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const settings = await sql`SELECT * FROM settings`;
@@ -28,14 +23,9 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const currentUser = await sql`SELECT role FROM auth_users WHERE id = ${session.user.id} LIMIT 1`;
-    if (currentUser[0]?.role !== "admin") {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
+    const authResult = await requireAdmin(request);
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const body = await request.json();

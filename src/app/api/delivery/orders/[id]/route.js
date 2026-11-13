@@ -5,9 +5,60 @@ import { triggerOrderNotifications, NOTIFICATION_TYPES } from "@/utils/notificat
 import { awardPointsForCompletedOrder } from "@/utils/loyaltyService";
 import logger from "@/utils/logger";
 
+export async function GET(request, { params }) {
+  try {
+    const authResult = await requireDeliveryPartner(request);
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
+    }
+
+    const partnerId = authResult.user.id;
+    const { id } = params;
+
+    // Delivery partners can ONLY view orders assigned to their account
+    const existingOrders = await sql`
+      SELECT o.*, o.order_number
+      FROM orders o
+      WHERE o.id = ${id} AND o.assigned_delivery_partner_id = ${partnerId}
+      LIMIT 1
+    `;
+
+    if (existingOrders.length === 0) {
+      return Response.json(
+        { error: "Order not found or not assigned to your delivery partner account." },
+        { status: 403 }
+      );
+    }
+
+    const order = existingOrders[0];
+    const [items, history] = await Promise.all([
+      sql`SELECT * FROM order_items WHERE order_id = ${id}`,
+      sql`
+        SELECT h.*, u.name as changed_by_name
+        FROM order_status_history h
+        LEFT JOIN auth_users u ON u.id = h.changed_by_user_id
+        WHERE h.order_id = ${id}
+        ORDER BY h.created_at ASC
+      `,
+    ]);
+
+    return Response.json({
+      order: {
+        ...order,
+        order_number: order.order_number || `SU-2026-${String(order.id).padStart(4, "0")}`,
+        items: items || [],
+        history: history || [],
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching delivery order:", error);
+    return Response.json({ error: "Failed to fetch delivery order" }, { status: 500 });
+  }
+}
+
 export async function PUT(request, { params }) {
   try {
-    const authResult = await requireDeliveryPartner();
+    const authResult = await requireDeliveryPartner(request);
     if (authResult.error) {
       return Response.json({ error: authResult.error }, { status: authResult.status });
     }

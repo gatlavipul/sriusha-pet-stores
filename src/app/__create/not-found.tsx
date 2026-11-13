@@ -1,219 +1,154 @@
-import fg from 'fast-glob';
 import { useNavigate } from 'react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Home, Search, ShoppingBag, ArrowLeft, Heart, Phone } from 'lucide-react';
 
 type LoaderArgs = {
   params: Record<string, string | undefined>;
 };
 
 export async function loader({ params }: LoaderArgs) {
-  const matches = await fg('src/**/page.{js,jsx,ts,tsx}');
   return {
-    path: `/${params['*']}`,
-    pages: matches
-      .sort((a, b) => a.length - b.length)
-      .map((match) => {
-        const url = match.replace('src/app', '').replace(/\/page\.(js|jsx|ts|tsx)$/, '') || '/';
-        const path = url.replaceAll('[', '').replaceAll(']', '');
-        const displayPath = path === '/' ? 'Homepage' : path;
-        return { url, path: displayPath };
-      }),
+    path: `/${params['*'] || ''}`,
   };
 }
 
-interface ParentSitemap {
-  webPages?: Array<{
-    id: string;
-    name: string;
-    filePath: string;
-    cleanRoute?: string;
-  }>;
-}
-
-export default function CreateDefaultNotFoundPage({
+export default function SriUshaNotFoundPage({
   loaderData,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>>;
 }) {
-  const [siteMap, setSitemap] = useState<ParentSitemap | null>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-      const handler = (event: MessageEvent) => {
-        if (event.data.type === 'sandbox:sitemap') {
-          window.removeEventListener('message', handler);
-          setSitemap(event.data.sitemap);
-        }
-      };
-
-      window.parent.postMessage(
-        {
-          type: 'sandbox:sitemap',
-        },
-        '*'
-      );
-      window.addEventListener('message', handler);
-
-      return () => {
-        window.removeEventListener('message', handler);
-      };
-    }
-  }, []);
-  const missingPath = loaderData.path.replace(/^\//, '');
-  const existingRoutes = loaderData.pages.map((page) => ({
-    path: page.path,
-    url: page.url,
-  }));
-
-  const handleBack = () => {
-    navigate('/');
-  };
-
-  const handleSearch = (value: string) => {
-    if (!siteMap) {
-      const path = `/${value}`;
-      navigate(path);
-    } else {
-      navigate(value);
-    }
-  };
-
-  const handleCreatePage = useCallback(() => {
-    window.parent.postMessage(
-      {
-        type: 'sandbox:web:create',
-        path: missingPath,
-        view: 'web',
-      },
-      '*'
-    );
-  }, [missingPath]);
+  const path = loaderData?.path || '';
 
   return (
-    <div className="flex sm:w-full w-screen sm:min-w-[850px] flex-col">
-      <div className="flex w-full items-center gap-2 p-5">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="flex items-center justify-center w-10 h-10 rounded-md"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 18 18"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-label="Back"
-            role="img"
+    <div className="min-h-screen bg-[#FDFDFD] flex flex-col justify-between text-[#0F172A]">
+      {/* Top minimal branding */}
+      <header className="border-b border-gray-100 bg-white/80 backdrop-blur-md px-4 py-3 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-[#2563EB] flex items-center justify-center text-white font-extrabold text-base shadow-xs">
+              🐾
+            </div>
+            <div>
+              <span className="font-extrabold text-sm text-[#0F172A] leading-tight block">Sri Usha</span>
+              <span className="text-[10px] font-bold text-gray-400 block -mt-0.5">Vet &amp; Pet Stores</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-blue-600 transition-colors"
           >
-            <path
-              d="M8.5957 2.65435L2.25005 9L8.5957 15.3457"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M2.25007 9L15.75 9"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <div className="flex flex-row divide-x divide-gray-200 rounded-[8px] h-8 w-[300px] border border-gray-200 bg-gray-50 text-gray-500">
-          <div className="flex items-center px-[14px] py-[5px]">
-            <span>/</span>
-          </div>
-          <div className="flex items-center min-w-0">
-            <p
-              className="border-0 bg-transparent px-3 py-2 focus:outline-none truncate max-w-[300px]"
-              style={{ minWidth: 0 }}
-              title={missingPath}
-            >
-              {missingPath}
-            </p>
-          </div>
+            <Home size={14} />
+            <span>Home</span>
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="flex flex-grow flex-col items-center justify-center pt-[100px] text-center gap-[20px]">
-        <h1 className="text-4xl font-medium text-gray-900 px-2">
-          Uh-oh! This page doesn't exist (yet).
-        </h1>
-
-        <p className="pt-4 pb-12 px-2 text-gray-500">
-          Looks like "<span className="font-bold">/{missingPath}</span>" isn't part of your project.
-          But no worries, you've got options!
-        </p>
-
-        <div className="px-[20px] w-full">
-          <div className="flex flex-row justify-center items-center w-full max-w-[800px] mx-auto border border-gray-200 rounded-lg p-[20px] mb-[40px] gap-[20px]">
-            <div className="flex flex-col gap-[5px] items-start self-start w-1/2">
-              <p className="text-sm text-black text-left">Build it from scratch</p>
-              <p className="text-sm text-gray-500 text-left">
-                Create a new page to live at "<span>/{missingPath}</span>"
-              </p>
-            </div>
-            <div className="flex flex-row items-center justify-end w-1/2">
-              <button
-                type="button"
-                className="bg-black text-white px-[10px] py-[5px] rounded-md"
-                onClick={() => handleCreatePage()}
-              >
-                Create Page
-              </button>
-            </div>
+      {/* Main friendly 404 content */}
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full text-center">
+          <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-amber-50 text-amber-500 shadow-inner">
+            <span className="text-5xl">🐶</span>
           </div>
-        </div>
 
-        <div className="pb-20 lg:pb-[80px]">
-          <p className="flex items-center text-gray-500">
-            Check out all your project's routes here ↓
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 mb-3">
+            <span>Error 404 • Page Not Found</span>
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+            Looks like this paw trail ended!
+          </h1>
+
+          <p className="mt-3 text-sm text-gray-600 leading-relaxed max-w-sm mx-auto">
+            The page <code className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-xs font-mono">{path}</code> could not be found or has moved.
           </p>
-        </div>
 
-        {siteMap ? (
-          <div className="flex flex-col justify-center items-center w-full px-[50px]">
-            <div className="flex flex-col justify-between items-center w-full max-w-[600px] gap-[10px]">
-              <p className="text-sm text-gray-300 pb-[10px] self-start p-4">PAGES</p>
-              {siteMap.webPages?.map((route) => (
-                <button
-                  type="button"
-                  onClick={() => handleSearch(route.cleanRoute || '')}
-                  key={route.id}
-                  className="flex flex-row justify-between text-center items-center p-4 rounded-lg bg-white shadow-sm w-full hover:bg-gray-50"
-                >
-                  <h3 className="font-medium text-gray-900">{route.name}</h3>
-                  <p className="text-sm text-gray-400">{route.cleanRoute}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-3 w-full max-w-[80rem] mx-auto pb-5 px-2">
-            {existingRoutes.map((route) => (
-              <div
-                key={route.path}
-                className="flex flex-col flex-grow basis-full sm:basis-[calc(50%-0.375rem)] xl:basis-[calc(33.333%-0.5rem)]"
-              >
-                <div className="w-full flex-1 flex flex-col items-center ">
-                  <div className="relative w-full max-w-[350px] h-48 sm:h-56 lg:h-64 overflow-hidden rounded-[8px] border border-comeback-gray-75 transition-all group-hover:shadow-md">
-                    <button
-                      type="button"
-                      onClick={() => handleSearch(route.url.replace(/^\//, ''))}
-                      className="h-full w-full rounded-[8px] bg-gray-50 bg-cover"
-                    />
-                  </div>
-                  <p className="pt-3 text-left text-gray-500 w-full max-w-[350px]">{route.path}</p>
-                </div>
+          {/* Quick Action Navigation Grid */}
+          <div className="mt-8 grid grid-cols-2 gap-3 text-left">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="flex items-center gap-3 p-3.5 rounded-2xl border border-gray-200 bg-white hover:border-blue-500 hover:shadow-xs transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 shrink-0">
+                <Home size={18} />
               </div>
-            ))}
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 truncate">Store Home</p>
+                <p className="text-[11px] text-gray-500 truncate">Pet essentials</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/products')}
+              className="flex items-center gap-3 p-3.5 rounded-2xl border border-gray-200 bg-white hover:border-blue-500 hover:shadow-xs transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 shrink-0">
+                <Search size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 truncate">Search Products</p>
+                <p className="text-[11px] text-gray-500 truncate">Food &amp; medicines</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/cart')}
+              className="flex items-center gap-3 p-3.5 rounded-2xl border border-gray-200 bg-white hover:border-blue-500 hover:shadow-xs transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
+                <ShoppingBag size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 truncate">My Cart</p>
+                <p className="text-[11px] text-gray-500 truncate">Review items</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/pets')}
+              className="flex items-center gap-3 p-3.5 rounded-2xl border border-gray-200 bg-white hover:border-blue-500 hover:shadow-xs transition-all"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 shrink-0">
+                <Heart size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-gray-900 truncate">Pet Passport</p>
+                <p className="text-[11px] text-gray-500 truncate">Manage pets</p>
+              </div>
+            </button>
           </div>
-        )}
-      </div>
+
+          <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-center gap-4 text-xs font-medium text-gray-500">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft size={14} />
+              <span>Go Back</span>
+            </button>
+            <span>•</span>
+            <a
+              href="https://wa.me/919999999999"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 font-semibold"
+            >
+              <Phone size={14} />
+              <span>Need help? WhatsApp Store</span>
+            </a>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer copyright */}
+      <footer className="border-t border-gray-100 py-4 text-center text-xs text-gray-400">
+        © {new Date().getFullYear()} Sri Usha Vet &amp; Pet Stores • Uppal, Hyderabad
+      </footer>
     </div>
   );
 }

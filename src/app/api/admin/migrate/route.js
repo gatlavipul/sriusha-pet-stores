@@ -1,17 +1,11 @@
 import sql from "@/app/api/utils/sql";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/app/api/utils/security";
 
 export async function POST(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user is admin
-    const users = await sql`SELECT role FROM auth_users WHERE id = ${session.user.id}`;
-    if (users.length === 0 || users[0].role !== 'admin') {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
+    const authResult = await requireAdmin(request);
+    if (authResult.error) {
+      return Response.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const results = [];

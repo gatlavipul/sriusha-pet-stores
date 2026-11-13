@@ -1,9 +1,9 @@
 import sql from "@/app/api/utils/sql";
 import { requireDeliveryPartner } from "@/app/api/utils/security";
 
-export async function GET() {
+export async function GET(req) {
   try {
-    const authResult = await requireDeliveryPartner();
+    const authResult = await requireDeliveryPartner(req);
     if (authResult.error) {
       return Response.json({ error: authResult.error }, { status: authResult.status });
     }
