@@ -330,31 +330,28 @@ export default function SignUpPage() {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#F8FAFC] via-[#EFF6FF]/40 to-[#FFF7ED]/70 text-[#0F172A] flex flex-col">
+    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#241819] flex flex-col">
       {/* Top Bar */}
-      <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
+      <header className="w-full border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5 group">
             <img
-              src="https://ucarecdn.com/1ba9ff02-d14c-447c-b424-734247393bdd/-/format/auto/"
+              src="/brand/logo-full.webp"
+              onError={(e) => {
+                e.currentTarget.src = "/brand/logo-full.png";
+              }}
               alt="Sri Usha Vet & Pet Stores"
+              width={160}
+              height={48}
               className="h-9 sm:h-10 w-auto transition-transform group-hover:scale-105"
             />
-            <div>
-              <div className="text-sm font-extrabold tracking-tight text-slate-900 leading-tight">
-                Sri Usha
-              </div>
-              <div className="text-[10px] font-bold tracking-wider text-[#EA580C] uppercase">
-                Vet &amp; Pet Stores
-              </div>
-            </div>
           </a>
 
           <a
             href="/"
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:border-[#2563EB]/40 hover:text-[#2563EB] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 py-1.5 text-xs font-bold text-[#4A0A0F] shadow-2xs hover:border-[#F97316] hover:text-[#F97316] transition-colors"
           >
-            <ArrowLeft size={14} />
+            <ArrowLeft size={14} strokeWidth={1.75} />
             <span>Back to Store</span>
           </a>
         </div>
@@ -387,14 +384,14 @@ export default function SignUpPage() {
             </svg>
 
             <div className="relative z-10 space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-200/80 bg-white/90 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-[#2563EB] shadow-2xs">
-                <span>✨</span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#FED7AA] bg-white/90 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-[#F97316] shadow-2xs">
+                <Sparkles size={13} strokeWidth={1.75} className="text-[#F97316]" />
                 <span>Your Pet Care Journey Starts Here</span>
               </div>
 
               <div className="space-y-3">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                  Join the Sri Usha Pet Care Family 🐾
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-[#4A0A0F] leading-tight">
+                  Join the Sri Usha Pet Care Family
                 </h1>
                 <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
                   Create your free customer account in seconds for genuine veterinary products,

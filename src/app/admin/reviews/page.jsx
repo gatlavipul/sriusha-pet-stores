@@ -122,8 +122,13 @@ function AdminReviewsContent() {
                 <div className="space-y-1 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="font-black text-gray-900">{rev.product_name}</span>
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 font-bold text-amber-700">
-                      {"★".repeat(rev.rating)} ({rev.rating}/5)
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-bold text-amber-700">
+                      <span className="flex items-center text-amber-400">
+                        {[...Array(Math.min(5, Math.max(1, rev.rating || 5)))].map((_, i) => (
+                          <Star key={i} size={11} className="fill-amber-400 text-amber-400" />
+                        ))}
+                      </span>
+                      <span>({rev.rating}/5)</span>
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { Plus, Trash2, Shield, User, Truck, Filter, CheckCircle, Eye, X, PawPrint, ShoppingBag } from "lucide-react";
+import { Plus, Trash2, Shield, User, Truck, Filter, CheckCircle, Eye, X, PawPrint, ShoppingBag, Dog, Cat, Bird } from "lucide-react";
 import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
 export default function AdminUsersPage() {
@@ -517,14 +517,16 @@ export default function AdminUsersPage() {
                               className="h-12 w-12 rounded-xl object-cover border border-gray-200 shrink-0"
                             />
                           ) : (
-                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-black text-base shrink-0">
-                              {pet.type === "dog"
-                                ? "🐶"
-                                : pet.type === "cat"
-                                ? "🐱"
-                                : pet.type === "bird"
-                                ? "🐦"
-                                : "🐾"}
+                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#F97316] font-black text-base shrink-0 border border-[#FED7AA]">
+                              {pet.type === "dog" ? (
+                                <Dog size={22} strokeWidth={1.75} />
+                              ) : pet.type === "cat" ? (
+                                <Cat size={22} strokeWidth={1.75} />
+                              ) : pet.type === "bird" ? (
+                                <Bird size={22} strokeWidth={1.75} />
+                              ) : (
+                                <PawPrint size={22} strokeWidth={1.75} />
+                              )}
                             </div>
                           )}
                           <div className="min-w-0">

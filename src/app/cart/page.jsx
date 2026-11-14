@@ -148,13 +148,13 @@ export default function CartPage() {
                   <div className="flex items-center gap-1.5">
                     <Truck size={16} className="text-[#2563EB]" />
                     {isFreeShipping ? (
-                      <span className="text-emerald-700 font-extrabold">
-                        🎉 Congratulations! You unlocked FREE Delivery!
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-extrabold">
+                        <Sparkles size={14} className="text-emerald-600" /> Congratulations! You unlocked FREE Delivery!
                       </span>
                     ) : (
                       <span>
                         Add{" "}
-                        <span className="text-[#2563EB]">
+                        <span className="text-[#F97316] font-bold">
                           ₹{amountForFreeShipping.toFixed(0)}
                         </span>{" "}
                         more for FREE Delivery!

@@ -293,7 +293,7 @@ export default function ProductsPage() {
               <ProductCard
                 key={product.id}
                 product={product}
-                deliveryBadge="⚡ 30-60m Delivery"
+                deliveryBadge="30-60m Delivery"
               />
             ))}
           </div>

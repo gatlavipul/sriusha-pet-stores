@@ -12,6 +12,8 @@ import {
   XCircle,
   AlertTriangle,
   UserCheck,
+  Check,
+  X,
 } from "lucide-react";
 import { useAdminAccess, AdminAccessRestricted, AdminAuthChecking } from "@/components/AdminAccessGuard";
 
@@ -348,8 +350,9 @@ export default function AdminOrdersPage() {
               <button
                 onClick={() => setSelectedOrder(null)}
                 className="rounded-full p-2 text-gray-400 hover:bg-gray-100 text-sm font-bold"
+                aria-label="Close modal"
               >
-                ✕
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
 
@@ -522,9 +525,14 @@ export default function AdminOrdersPage() {
 
                 {selectedOrder.status === "cancelled" && (
                   <div className="mt-3 text-[11px] text-red-700 bg-red-50 p-2.5 rounded-xl border border-red-200">
-                    {selectedOrder.stock_restored
-                      ? "✓ Inventory stock for these items has been safely restored to the store catalog."
-                      : "Pending inventory return."}
+                    {selectedOrder.stock_restored ? (
+                      <span className="flex items-center gap-1 font-bold">
+                        <Check size={13} strokeWidth={2.5} className="text-emerald-600" />
+                        <span>Inventory stock for these items has been safely restored to the store catalog.</span>
+                      </span>
+                    ) : (
+                      "Pending inventory return."
+                    )}
                   </div>
                 )}
               </div>

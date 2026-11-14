@@ -2,8 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Brand Identity Tokens from Sri Usha Logo */
+  --brand-maroon: #4A0A0F;
+  --brand-maroon-dark: #360509;
+  --brand-maroon-light: #701A20;
+  --brand-orange: #F97316;
+  --brand-orange-hover: #EA580C;
+  --brand-orange-light: #FFF7ED;
+  --brand-yellow: #FACC15;
+  --brand-yellow-light: #FEFCE8;
+  --brand-cream: #FAF7F2;
+  --brand-cream-card: #FFFDF9;
+  --brand-dark: #241819;
+  --brand-muted: #6E5F5F;
+}
+
 @layer base {
+  body {
+    background-color: var(--brand-cream);
+    color: var(--brand-dark);
+  }
+
   input, textarea, select, button {
     @apply outline-none focus:outline-none;
   }
 }
+
+/* Custom Brand Utilities */
+.bg-brand-maroon { background-color: #4A0A0F; }
+.bg-brand-maroon-dark { background-color: #360509; }
+.bg-brand-maroon-light { background-color: #701A20; }
+.text-brand-maroon { color: #4A0A0F; }
+.border-brand-maroon { border-color: #4A0A0F; }
+
+.bg-brand-orange { background-color: #F97316; }
+.bg-brand-orange-hover:hover { background-color: #EA580C; }
+.bg-brand-orange-light { background-color: #FFF7ED; }
+.text-brand-orange { color: #F97316; }
+.border-brand-orange { border-color: #F97316; }
+
+.bg-brand-yellow { background-color: #FACC15; }
+.bg-brand-yellow-light { background-color: #FEFCE8; }
+.text-brand-yellow { color: #FACC15; }
+
+.bg-brand-cream { background-color: #FAF7F2; }
+.bg-brand-cream-card { background-color: #FFFDF9; }
+.text-brand-dark { color: #241819; }
+.text-brand-muted { color: #6E5F5F; }

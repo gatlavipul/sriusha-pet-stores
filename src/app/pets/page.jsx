@@ -282,8 +282,8 @@ export default function PetFamilyHubPage() {
               </div>
               <h1 className="mt-2.5 text-2xl sm:text-3xl font-black tracking-tight text-gray-900">
                 {activePet
-                  ? `${activePet.name}'s Care Space ${getPetEmoji(activePet.type)}`
-                  : "Your Pet Care Passport 🐾"}
+                  ? `${activePet.name}'s Care Space`
+                  : "Your Pet Care Passport"}
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-gray-600">
                 Keep each pet&apos;s food, health interests, and store essentials organized in one place.
@@ -620,12 +620,12 @@ export default function PetFamilyHubPage() {
                   <select
                     value={petForm.type}
                     onChange={(e) => setPetForm({ ...petForm, type: e.target.value })}
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   >
-                    <option value="dog">🐶 Dog</option>
-                    <option value="cat">🐱 Cat</option>
-                    <option value="bird">🐦 Bird</option>
-                    <option value="other">🐾 Other</option>
+                    <option value="dog">Dog</option>
+                    <option value="cat">Cat</option>
+                    <option value="bird">Bird</option>
+                    <option value="other">Other Pet</option>
                   </select>
                 </div>
                 <div>

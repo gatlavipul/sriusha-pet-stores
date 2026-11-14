@@ -14,6 +14,8 @@ import {
   Phone,
   MapPin,
   RefreshCw,
+  Check,
+  BellOff,
 } from "lucide-react";
 
 export default function AdminOperationsPage() {
@@ -122,8 +124,9 @@ export default function AdminOperationsPage() {
           </div>
 
           {actionMsg && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
-              ✓ {actionMsg}
+            <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
+              <Check size={14} strokeWidth={2.5} className="text-emerald-600" />
+              <span>{actionMsg}</span>
             </div>
           )}
 
@@ -170,8 +173,9 @@ export default function AdminOperationsPage() {
             </div>
 
             {unassignedReady.length === 0 ? (
-              <p className="text-xs text-gray-500 py-3">
-                ✓ All current orders have assigned delivery partners or are completed.
+              <p className="flex items-center gap-1.5 text-xs text-gray-500 py-3">
+                <Check size={14} className="text-emerald-600" strokeWidth={2.5} />
+                <span>All current orders have assigned delivery partners or are completed.</span>
               </p>
             ) : (
               <div className="space-y-3">
@@ -192,8 +196,9 @@ export default function AdminOperationsPage() {
                           {o.payment_method} (₹{parseFloat(o.total_amount).toFixed(0)})
                         </span>
                         {o.gentle_delivery && (
-                          <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-extrabold text-amber-900">
-                            🔕 Gentle Drop
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-extrabold text-amber-900">
+                            <BellOff size={10} strokeWidth={1.75} />
+                            <span>Gentle Drop</span>
                           </span>
                         )}
                       </div>

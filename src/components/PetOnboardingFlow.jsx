@@ -8,13 +8,17 @@ import {
   ShoppingBag,
   Loader2,
   PawPrint,
+  Dog,
+  Cat,
+  Bird,
+  Check,
 } from "lucide-react";
 
 const PET_TYPES = [
-  { id: "dog", label: "Dog", emoji: "🐶", desc: "Food, treats, grooming & care" },
-  { id: "cat", label: "Cat", emoji: "🐱", desc: "Litter, nutrition & hygiene" },
-  { id: "bird", label: "Bird", emoji: "🐦", desc: "Seeds, vitamins & accessories" },
-  { id: "other", label: "Other", emoji: "🐾", desc: "Small pets & specialty care" },
+  { id: "dog", label: "Dog", icon: Dog, bg: "bg-[#FFF7ED]", text: "text-[#F97316]", border: "border-[#FED7AA]", desc: "Food, treats, grooming & care" },
+  { id: "cat", label: "Cat", icon: Cat, bg: "bg-[#FEFCE8]", text: "text-[#D97706]", border: "border-[#FEF08A]", desc: "Litter, nutrition & hygiene" },
+  { id: "bird", label: "Bird", icon: Bird, bg: "bg-sky-50", text: "text-[#0284C7]", border: "border-sky-200", desc: "Seeds, vitamins & accessories" },
+  { id: "other", label: "Other", icon: PawPrint, bg: "bg-amber-50", text: "text-[#EA580C]", border: "border-amber-200", desc: "Small pets & specialty care" },
 ];
 
 const CARE_INTEREST_OPTIONS = [
@@ -33,10 +37,7 @@ const FOOD_SUGGESTIONS = {
 };
 
 export function getPetEmoji(type) {
-  if (type === "dog") return "🐶";
-  if (type === "cat") return "🐱";
-  if (type === "bird") return "🐦";
-  return "🐾";
+  return "";
 }
 
 export default function PetOnboardingFlow({
@@ -182,7 +183,7 @@ export default function PetOnboardingFlow({
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
-            Welcome to the Sri Usha Pet Care Family! 🐾
+            Welcome to the Sri Usha Pet Care Family!
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Tell us who you shop for so we can highlight the right food, grooming, and veterinary essentials.
@@ -193,22 +194,27 @@ export default function PetOnboardingFlow({
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {PET_TYPES.map((petType) => (
-              <button
-                key={petType.id}
-                type="button"
-                onClick={() => handleSelectPetType(petType.id)}
-                className="group rounded-2xl border border-gray-200 bg-white p-4 text-center shadow-2xs transition-all hover:border-[#0066CC] hover:shadow-md"
-              >
-                <div className="text-3xl mb-2">{petType.emoji}</div>
-                <div className="text-sm font-extrabold text-gray-900 group-hover:text-[#0066CC]">
-                  {petType.label}
-                </div>
-                <div className="mt-1 text-[11px] text-gray-500 leading-snug">
-                  {petType.desc}
-                </div>
-              </button>
-            ))}
+            {PET_TYPES.map((petType) => {
+              const IconComp = petType.icon;
+              return (
+                <button
+                  key={petType.id}
+                  type="button"
+                  onClick={() => handleSelectPetType(petType.id)}
+                  className="group rounded-2xl border border-gray-200 bg-white p-4 text-center shadow-2xs transition-all hover:border-[#F97316] hover:shadow-md"
+                >
+                  <div className={`mx-auto h-12 w-12 rounded-full flex items-center justify-center ${petType.bg} border ${petType.border} ${petType.text} mb-2 shadow-2xs group-hover:scale-110 transition-transform`}>
+                    <IconComp size={22} strokeWidth={1.75} />
+                  </div>
+                  <div className="text-sm font-extrabold text-gray-900 group-hover:text-[#4A0A0F]">
+                    {petType.label}
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-500 leading-snug">
+                    {petType.desc}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           <div className="mt-6">
@@ -274,12 +280,12 @@ export default function PetOnboardingFlow({
               <select
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#0066CC]"
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#F97316]"
               >
-                <option value="dog">🐶 Dog</option>
-                <option value="cat">🐱 Cat</option>
-                <option value="bird">🐦 Bird</option>
-                <option value="other">🐾 Other</option>
+                <option value="dog">Dog</option>
+                <option value="cat">Cat</option>
+                <option value="bird">Bird</option>
+                <option value="other">Other Pet</option>
               </select>
             </div>
 
@@ -419,8 +425,14 @@ export default function PetOnboardingFlow({
                           : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                       }`}
                     >
-                      {selected ? "✓ " : "+ "}
-                      {interest}
+                      {selected ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Check size={12} strokeWidth={2.5} />
+                          <span>{interest}</span>
+                        </span>
+                      ) : (
+                        `+ ${interest}`
+                      )}
                     </button>
                   );
                 })}

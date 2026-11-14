@@ -1176,9 +1176,10 @@ export default function AdminProductsPage() {
                         <button
                           type="button"
                           onClick={() => setVariantRows(variantRows.filter((_, i) => i !== idx))}
-                          className="col-span-1 text-center text-xs font-bold text-rose-600 hover:text-rose-800"
+                          className="col-span-1 flex items-center justify-center text-xs font-bold text-rose-600 hover:text-rose-800"
+                          aria-label="Remove variant"
                         >
-                          ✕
+                          <X size={14} strokeWidth={2} />
                         </button>
                       </div>
                     ))}

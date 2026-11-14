@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   RotateCcw,
   XCircle,
+  BellOff,
+  X,
 } from "lucide-react";
 import useAuth from "@/utils/useAuth";
 
@@ -440,8 +442,9 @@ export default function DeliveryPartnerPage() {
 
                     <div className="flex flex-wrap items-center gap-3 pt-1">
                       {order.gentle_delivery && (
-                        <div className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold text-amber-900">
-                          🔕 GENTLE DELIVERY: Don&apos;t ring the bell — call customer on arrival
+                        <div className="w-full flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold text-amber-900">
+                          <BellOff size={14} className="text-[#F97316] shrink-0" strokeWidth={1.75} />
+                          <span>GENTLE DELIVERY: Don&apos;t ring the bell — call customer on arrival</span>
                         </div>
                       )}
                       {order.delivery_instructions && (
@@ -580,9 +583,10 @@ export default function DeliveryPartnerPage() {
               <button
                 type="button"
                 onClick={() => setFailureModalOrder(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="Close modal"
               >
-                ✕
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
 

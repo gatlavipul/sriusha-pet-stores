@@ -11,6 +11,9 @@ import {
   Lock,
   ArrowRight,
   Package,
+  Check,
+  X,
+  BellOff,
 } from "lucide-react";
 
 export default function CheckoutPage() {
@@ -608,13 +611,15 @@ export default function CheckoutPage() {
                         </p>
                       )}
                       {!checkingPincode && serviceability.checked && serviceability.serviceable && (
-                        <div className="mt-1.5 rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-[11px] font-semibold text-emerald-800">
-                          <span className="font-bold">✓ Serviceable:</span> {serviceability.message}
+                        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-[11px] font-semibold text-emerald-800">
+                          <Check size={14} className="text-emerald-600 shrink-0" strokeWidth={2.5} />
+                          <span><strong className="font-bold">Serviceable:</strong> {serviceability.message}</span>
                         </div>
                       )}
                       {!checkingPincode && serviceability.checked && !serviceability.serviceable && (
-                        <div className="mt-1.5 rounded-lg bg-red-50 border border-red-200 p-2 text-[11px] font-semibold text-red-700">
-                          <span className="font-bold">✕ Delivery Unavailable:</span> {serviceability.message}
+                        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 p-2 text-[11px] font-semibold text-red-700">
+                          <X size={14} className="text-red-600 shrink-0" strokeWidth={2.5} />
+                          <span><strong className="font-bold">Delivery Unavailable:</strong> {serviceability.message}</span>
                         </div>
                       )}
                     </div>
@@ -627,13 +632,14 @@ export default function CheckoutPage() {
                         type="checkbox"
                         checked={gentleDelivery}
                         onChange={(e) => setGentleDelivery(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-amber-400 text-[#2563EB] focus:ring-[#2563EB]"
+                        className="mt-0.5 h-4 w-4 rounded border-amber-400 text-[#F97316] focus:ring-[#F97316]"
                       />
                       <div>
-                        <span className="block text-xs font-extrabold text-amber-900">
-                          🔕 Gentle Delivery Mode (Don't ring the bell, call instead)
+                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
+                          <BellOff size={14} className="text-[#F97316]" strokeWidth={1.75} />
+                          <span>Gentle Delivery Mode (Don&apos;t ring the bell, call instead)</span>
                         </span>
-                        <span className="block text-[11px] text-amber-800/90">
+                        <span className="block text-[11px] text-amber-800/90 mt-0.5">
                           Ideal for reactive dogs, sleeping pets, or anxious cats — rider will call on arrival instead of ringing the doorbell.
                         </span>
                       </div>
@@ -811,8 +817,9 @@ export default function CheckoutPage() {
                       <p className="text-xs font-semibold text-purple-700">Uploading securely...</p>
                     )}
                     {prescriptionId && (
-                      <p className="text-xs font-bold text-emerald-700">
-                        ✓ Prescription uploaded ({rxFileName}) — Pending Staff Review
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                        <Check size={14} className="text-emerald-600" strokeWidth={2.5} />
+                        <span>Prescription uploaded ({rxFileName}) — Pending Staff Review</span>
                       </p>
                     )}
                   </div>

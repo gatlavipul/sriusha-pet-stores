@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Lock,
   Truck,
+  PawPrint,
 } from "lucide-react";
 import { getLocalCart, setLocalCart } from "@/utils/useCart";
 
@@ -340,54 +341,48 @@ export default function SignInPage() {
 
   const benefits = [
     {
-      emoji: "📦",
       icon: Package,
       title: "Track Your Orders",
       desc: "Follow live packing and doorstep delivery status across Hyderabad.",
-      accent: "bg-blue-50 text-[#2563EB] border-blue-100",
+      accent: "bg-[#FFF7ED] text-[#F97316] border-[#FED7AA]",
     },
     {
-      emoji: "❤️",
       icon: Heart,
       title: "Save Your Favourite Products",
       desc: "Keep veterinary nutrition, medicines, and pet treats one click away.",
       accent: "bg-rose-50 text-rose-600 border-rose-100",
     },
     {
-      emoji: "🐾",
       icon: Sparkles,
       title: "Shop Trusted Pet Care",
-      desc: "100% genuine veterinarian-approved essentials for dogs, cats & birds.",
-      accent: "bg-amber-50 text-[#EA580C] border-amber-100",
+      desc: "Genuine veterinarian-approved essentials for dogs, cats & birds.",
+      accent: "bg-[#FEFCE8] text-[#D97706] border-[#FEF08A]",
     },
   ];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#F8FAFC] via-[#EFF6FF]/40 to-[#FFF7ED]/70 text-[#0F172A] flex flex-col">
+    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#241819] flex flex-col">
       {/* Minimal Top Bar */}
-      <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
+      <header className="w-full border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5 group">
             <img
-              src="https://ucarecdn.com/1ba9ff02-d14c-447c-b424-734247393bdd/-/format/auto/"
+              src="/brand/logo-full.webp"
+              onError={(e) => {
+                e.currentTarget.src = "/brand/logo-full.png";
+              }}
               alt="Sri Usha Vet & Pet Stores"
+              width={160}
+              height={48}
               className="h-9 sm:h-10 w-auto transition-transform group-hover:scale-105"
             />
-            <div>
-              <div className="text-sm font-extrabold tracking-tight text-slate-900 leading-tight">
-                Sri Usha
-              </div>
-              <div className="text-[10px] font-bold tracking-wider text-[#EA580C] uppercase">
-                Vet &amp; Pet Stores
-              </div>
-            </div>
           </a>
 
           <a
             href="/"
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:border-[#2563EB]/40 hover:text-[#2563EB] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 py-1.5 text-xs font-bold text-[#4A0A0F] shadow-2xs hover:border-[#F97316] hover:text-[#F97316] transition-colors"
           >
-            <ArrowLeft size={14} />
+            <ArrowLeft size={14} strokeWidth={1.75} />
             <span>Back to Store</span>
           </a>
         </div>
@@ -397,42 +392,30 @@ export default function SignInPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         <div className="mx-auto w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* LEFT COLUMN — Sri Usha Brand Experience */}
-          <section className="lg:col-span-6 relative overflow-hidden rounded-3xl border border-blue-100/90 bg-gradient-to-br from-white via-[#F0F7FF] to-[#FFF4E8] p-6 sm:p-10 shadow-sm">
-            {/* Decorative Subtle Paw & Care SVG Background Elements */}
+          <section className="lg:col-span-6 relative overflow-hidden rounded-3xl border border-[#FED7AA] bg-gradient-to-br from-white via-[#FFFDF9] to-[#FFF7ED] p-6 sm:p-10 shadow-sm">
+            {/* Decorative Subtle Elements */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -right-8 -top-8 h-44 w-44 rounded-full bg-blue-100/50 blur-2xl"
+              className="pointer-events-none absolute -right-8 -top-8 h-44 w-44 rounded-full bg-orange-100/40 blur-2xl"
             />
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -bottom-10 -left-10 h-44 w-44 rounded-full bg-amber-100/60 blur-2xl"
+              className="pointer-events-none absolute -bottom-10 -left-10 h-44 w-44 rounded-full bg-amber-100/50 blur-2xl"
             />
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 120 120"
-              className="pointer-events-none absolute right-5 bottom-5 h-28 w-28 text-[#2563EB]/[0.06]"
-              fill="currentColor"
-            >
-              <ellipse cx="60" cy="76" rx="22" ry="18" />
-              <circle cx="34" cy="48" r="9" />
-              <circle cx="51" cy="35" r="9.5" />
-              <circle cx="71" cy="35" r="9.5" />
-              <circle cx="88" cy="48" r="9" />
-            </svg>
 
             <div className="relative z-10 space-y-6">
               {/* Brand Eyebrow Pill */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/90 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-[#EA580C] shadow-2xs">
-                <span>🐾</span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#FED7AA] bg-white/90 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-[#F97316] shadow-2xs">
+                <PawPrint size={13} strokeWidth={1.75} className="text-[#F97316]" />
                 <span>Your Pet Care Journey Starts Here</span>
               </div>
 
               {/* Welcome Heading & Copy */}
               <div className="space-y-3">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                  Welcome Back to Your Pet Care Family 🐾
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-[#4A0A0F] leading-tight">
+                  Welcome Back to Your Pet Care Family
                 </h1>
-                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                <p className="text-sm sm:text-base text-stone-600 leading-relaxed">
                   Manage your veterinary prescriptions, repeat pet food orders, wishlist
                   favourites, and fast doorstep delivery across Hyderabad—all in one place.
                 </p>
@@ -440,37 +423,40 @@ export default function SignInPage() {
 
               {/* Three Small Benefit Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3 pt-1">
-                {benefits.map((b) => (
-                  <div
-                    key={b.title}
-                    className="flex items-start gap-3.5 rounded-2xl border border-white/90 bg-white/85 backdrop-blur-xs p-3.5 shadow-2xs transition-transform hover:-translate-y-0.5"
-                  >
+                {benefits.map((b) => {
+                  const IconComp = b.icon;
+                  return (
                     <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-base ${b.accent}`}
+                      key={b.title}
+                      className="flex items-start gap-3.5 rounded-2xl border border-white/90 bg-white/90 backdrop-blur-xs p-3.5 shadow-2xs transition-transform hover:-translate-y-0.5"
                     >
-                      <span aria-hidden="true">{b.emoji}</span>
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-base ${b.accent}`}
+                      >
+                        <IconComp size={18} strokeWidth={1.75} />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-xs sm:text-sm font-bold text-[#4A0A0F]">
+                          {b.title}
+                        </h2>
+                        <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-snug">
+                          {b.desc}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h2 className="text-xs sm:text-sm font-bold text-slate-900">
-                        {b.title}
-                      </h2>
-                      <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 leading-snug">
-                        {b.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Clinic Trust Footer */}
-              <div className="pt-2 border-t border-slate-200/70 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium text-slate-600">
+              <div className="pt-2 border-t border-stone-200/80 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium text-stone-600">
                 <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck size={14} className="text-emerald-600" />
-                  100% Authentic Vet Pharmacy
+                  <ShieldCheck size={14} strokeWidth={1.75} className="text-emerald-600" />
+                  Authentic Veterinary Supplies
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Truck size={14} className="text-[#2563EB]" />
-                  Uppal Hub • Same-Day Dispatch
+                  <Truck size={14} strokeWidth={1.75} className="text-[#F97316]" />
+                  Uppal Hub • Quick Dispatch
                 </span>
               </div>
             </div>

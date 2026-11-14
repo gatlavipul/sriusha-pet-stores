@@ -28,6 +28,10 @@ import {
   Sparkles,
   Gift,
   RotateCcw,
+  Dog,
+  Cat,
+  Bird,
+  Zap,
 } from "lucide-react";
 
 const STATUS_BADGE = {
@@ -1193,7 +1197,10 @@ export default function CustomerAccountPage() {
         {activeTab === "pantry" && (
           <section className="space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h2 className="text-lg font-black text-gray-900">🥫 Smart Pet Pantry</h2>
+              <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
+                <Package size={20} strokeWidth={1.75} className="text-[#F97316]" />
+                <span>Smart Pet Pantry</span>
+              </h2>
               <p className="text-xs text-gray-500 mt-1">
                 Calculates estimated pack consumption from your real order history and pet weight so you never run out of essentials.
               </p>
@@ -1297,7 +1304,10 @@ export default function CustomerAccountPage() {
         {activeTab === "subscriptions" && (
           <section className="space-y-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h2 className="text-lg font-black text-gray-900">🔄 Flexible Pet Subscriptions</h2>
+              <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
+                <RotateCcw size={20} strokeWidth={1.75} className="text-[#F97316]" />
+                <span>Flexible Pet Subscriptions</span>
+              </h2>
               <p className="text-xs text-gray-500 mt-1">
                 5% subscriber savings on recurring pet food &amp; essentials. Skip, pause, or cancel in one tap anytime.
               </p>
@@ -1913,13 +1923,14 @@ export default function CustomerAccountPage() {
               <div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">🐾</span>
+                    <PawPrint size={20} strokeWidth={1.75} className="text-[#4A0A0F]" />
                     <h2 className="text-base font-black text-gray-900">
                       Sri Usha Pet Passport
                     </h2>
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800 tracking-wide">
-                    ⚡ Fast Pass
+                    <Zap size={10} className="fill-emerald-800 text-emerald-800" />
+                    <span>Fast Pass</span>
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-gray-600 leading-relaxed">
@@ -1939,7 +1950,7 @@ export default function CustomerAccountPage() {
                           key={p.id}
                           className="flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200/80 px-2.5 py-1 text-xs font-bold text-gray-800"
                         >
-                          <span>{p.type === "cat" ? "🐱" : p.type === "bird" ? "🦜" : "🐶"}</span>
+                          <span>{p.type === "cat" ? <Cat size={13} className="text-[#D97706]" strokeWidth={1.75} /> : p.type === "bird" ? <Bird size={13} className="text-[#0284C7]" strokeWidth={1.75} /> : <Dog size={13} className="text-[#F97316]" strokeWidth={1.75} />}</span>
                           <span>{p.name}</span>
                           <span className="text-[10px] font-normal text-gray-500">
                             ({p.breed || p.type})
@@ -2040,12 +2051,12 @@ export default function CustomerAccountPage() {
                     onChange={(e) =>
                       setPetForm({ ...petForm, type: e.target.value })
                     }
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   >
-                    <option value="dog">🐶 Dog</option>
-                    <option value="cat">🐱 Cat</option>
-                    <option value="bird">🐦 Bird</option>
-                    <option value="other">🐾 Other</option>
+                    <option value="dog">Dog</option>
+                    <option value="cat">Cat</option>
+                    <option value="bird">Bird</option>
+                    <option value="other">Other Pet</option>
                   </select>
                 </div>
                 <div>

@@ -11,6 +11,7 @@ import {
   IndianRupee,
   Clock,
   RefreshCw,
+  X,
 } from "lucide-react";
 
 export default function AdminServiceabilityPage() {
@@ -267,9 +268,10 @@ export default function AdminServiceabilityPage() {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="Close modal"
               >
-                ✕
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
 

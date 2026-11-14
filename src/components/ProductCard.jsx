@@ -1,8 +1,8 @@
-import { ShoppingBag, Plus, Minus, Check, AlertCircle, Clock, Heart, Star } from "lucide-react";
+import { ShoppingBag, Plus, Minus, Check, AlertCircle, Clock, Heart, Star, Zap } from "lucide-react";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
 
-export default function ProductCard({ product, deliveryBadge = "⚡ 30-60m Delivery" }) {
+export default function ProductCard({ product, deliveryBadge = "30-60m Delivery" }) {
   const { items, addToCart, updateQuantity, removeFromCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
@@ -59,7 +59,7 @@ export default function ProductCard({ product, deliveryBadge = "⚡ 30-60m Deliv
   };
 
   return (
-    <div className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-4 shadow-xs hover:border-[#2563EB] hover:shadow-lg transition-all duration-200 relative">
+    <div className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-4 shadow-xs hover:border-[#F97316]/60 hover:shadow-lg transition-all duration-200 relative">
       <div>
         {/* Top Badges & Image */}
         <div className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3">
@@ -76,12 +76,14 @@ export default function ProductCard({ product, deliveryBadge = "⚡ 30-60m Deliv
           {/* Quick-Commerce Fast Delivery Pill */}
           {deliveryBadge && (
             <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-              <span className="rounded-md bg-[#0F172A]/90 backdrop-blur-xs px-2 py-0.5 text-[9px] font-black uppercase text-amber-300 tracking-wider shadow-xs">
-                {deliveryBadge}
+              <span className="inline-flex items-center gap-1 rounded-md bg-[#4A0A0F]/90 backdrop-blur-xs px-2 py-0.5 text-[9px] font-black uppercase text-[#FACC15] tracking-wider shadow-xs">
+                <Zap size={10} className="fill-[#FACC15] text-[#FACC15]" />
+                <span>{deliveryBadge}</span>
               </span>
               {isBestSeller && (
-                <span className="rounded-md bg-amber-500 text-white font-extrabold text-[9px] px-1.5 py-0.5 uppercase tracking-wider shadow-xs">
-                  ★ Bestseller
+                <span className="inline-flex items-center gap-1 rounded-md bg-[#F97316] text-white font-extrabold text-[9px] px-1.5 py-0.5 uppercase tracking-wider shadow-xs">
+                  <Star size={9} className="fill-white text-white" />
+                  <span>Bestseller</span>
                 </span>
               )}
             </div>

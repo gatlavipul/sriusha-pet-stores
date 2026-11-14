@@ -543,7 +543,10 @@ export default function ProductDetailPage({ params }) {
 
               {addedSuccess && (
                 <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 flex items-center justify-between text-xs text-emerald-800">
-                  <span>✓ Item added to cart</span>
+                  <span className="inline-flex items-center gap-1.5 font-bold">
+                    <Check size={14} strokeWidth={2.5} className="text-emerald-600" />
+                    <span>Item added to cart</span>
+                  </span>
                   <a href="/cart" className="font-bold underline hover:text-emerald-950">
                     View Cart &amp; Checkout →
                   </a>

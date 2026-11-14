@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Home, Grid, PawPrint, ShoppingCart, User } from "lucide-react";
+import { Home, Search, PawPrint, ShoppingCart, User } from "lucide-react";
 import useCart from "@/utils/useCart";
 
 export default function MobileBottomNav() {
@@ -20,17 +20,18 @@ export default function MobileBottomNav() {
     return null;
   }
 
-  // Exactly 5 navigation items as specified in Phase 2
+  // Exactly 5 navigation items as specified in Phase 2 & Brand guidelines:
+  // Home, Search (Browse), PawPrint (My Pets), ShoppingCart (Cart), User (Account)
   const navItems = [
     { label: "Home", href: "/", icon: Home },
-    { label: "Browse", href: "/products", icon: Grid },
+    { label: "Browse", href: "/products", icon: Search },
     { label: "My Pets", href: "/pets", icon: PawPrint },
     {
       label: "Cart",
       href: "/cart",
       icon: ShoppingCart,
       badge: totalCount > 0 ? totalCount : null,
-      badgeColor: "bg-[#EA580C]",
+      badgeColor: "bg-[#F97316]",
     },
     { label: "Account", href: "/account", icon: User },
   ];
@@ -38,7 +39,7 @@ export default function MobileBottomNav() {
   return (
     <nav
       aria-label="Mobile bottom navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200/90 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FFFDF9]/95 backdrop-blur-md border-t border-[#EADBCC] shadow-[0_-4px_12px_rgba(74,10,15,0.05)]"
       style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 6px)" }}
     >
       <div className="flex items-center justify-around h-14 px-1">
@@ -54,15 +55,17 @@ export default function MobileBottomNav() {
               href={item.href}
               className={`flex flex-col items-center justify-center flex-1 py-1 relative transition-colors ${
                 isActive
-                  ? "text-[#2563EB] font-bold"
-                  : "text-gray-500 hover:text-gray-900"
+                  ? "text-[#4A0A0F] font-bold"
+                  : "text-stone-500 hover:text-stone-800"
               }`}
+              aria-label={item.label}
             >
               <div className="relative flex items-center justify-center">
                 <Icon
                   size={20}
-                  strokeWidth={isActive ? 2.5 : 2}
-                  className={isActive ? "text-[#2563EB]" : "text-gray-500"}
+                  strokeWidth={isActive ? 2.5 : 1.75}
+                  className={isActive ? "text-[#4A0A0F]" : "text-stone-500"}
+                  fill={isActive ? (item.label === "Cart" || item.label === "Account" || item.label === "Home" ? "currentColor" : "none") : "none"}
                 />
                 {item.badge !== null && item.badge !== undefined && (
                   <span
@@ -74,7 +77,7 @@ export default function MobileBottomNav() {
               </div>
               <span
                 className={`text-[10px] mt-1 tracking-tight leading-none ${
-                  isActive ? "font-bold text-[#2563EB]" : "font-medium"
+                  isActive ? "font-black text-[#4A0A0F]" : "font-medium"
                 }`}
               >
                 {item.label}

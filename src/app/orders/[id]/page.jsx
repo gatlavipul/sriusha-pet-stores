@@ -18,6 +18,10 @@ import {
   HelpCircle,
   Send,
   Phone,
+  Check,
+  X,
+  BellOff,
+  Zap,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 import {
@@ -326,8 +330,9 @@ export default function OrderDetailPage({ params }) {
                 </span>
               )}
               {order.gentle_delivery && (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
-                  🔕 Gentle Delivery: Call instead of bell
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+                  <BellOff size={13} strokeWidth={1.75} className="text-[#F97316]" />
+                  <span>Gentle Delivery: Call instead of bell</span>
                 </span>
               )}
             </div>
@@ -413,7 +418,7 @@ export default function OrderDetailPage({ params }) {
                                 : "bg-gray-100 text-gray-400"
                             }`}
                           >
-                            {isCompleted && !isCurrent ? "✓" : idx + 1}
+                            {isCompleted && !isCurrent ? <Check size={14} strokeWidth={2.5} /> : idx + 1}
                           </div>
                           <div className={`font-bold text-[11px] leading-tight ${isCompleted ? "text-gray-900" : "text-gray-400"}`}>
                             {stage.label}
@@ -440,8 +445,9 @@ export default function OrderDetailPage({ params }) {
                       <span className="font-extrabold text-gray-900 text-sm">
                         {order.deliveryPartner.name}
                       </span>
-                      <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-800">
-                        ⚡ Sri Usha Express Rider
+                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-800">
+                        <Zap size={10} className="fill-indigo-600 text-indigo-600" />
+                        <span>Sri Usha Express Rider</span>
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 mt-0.5">
@@ -631,8 +637,9 @@ export default function OrderDetailPage({ params }) {
                 <HelpCircle size={14} />
                 <span>Report Issue / Support Ticket</span>
               </button>
-              <a href="tel:+919876543210" className="font-semibold text-gray-700 hover:text-[#2563EB]">
-                📞 +91 98765 43210
+              <a href="tel:+919876543210" className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:text-[#F97316]">
+                <Phone size={13} strokeWidth={1.75} className="text-[#F97316]" />
+                <span>+91 98765 43210</span>
               </a>
             </div>
             <a
@@ -757,8 +764,9 @@ export default function OrderDetailPage({ params }) {
                 type="button"
                 onClick={() => setShowSupportModal(false)}
                 className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="Close support modal"
               >
-                ✕
+                <X size={16} strokeWidth={1.75} />
               </button>
             </div>
 
