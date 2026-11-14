@@ -37,66 +37,66 @@ export default function OrdersPage() {
 
   if (userLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#FDFDFD]">
+      <div className="min-h-screen bg-[#FFFDF9]">
         <Header />
         <div className="mx-auto max-w-7xl px-4 py-20 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mx-auto mb-4" />
-          <p className="text-xs text-gray-500 font-medium">Loading your orders...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#4A0A0F] border-t-transparent mx-auto mb-4" />
+          <p className="text-xs text-stone-500 font-medium">Loading your orders...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] text-[#0F172A]">
+    <div className="min-h-screen bg-[#FFFDF9] text-[#241819]">
       <Header />
 
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 border-b border-gray-200 pb-4">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900">
+        <div className="mb-8 border-b border-stone-200 pb-4">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-900">
             My Orders
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+          <p className="mt-1 text-xs sm:text-sm text-stone-500">
             Track and view previous purchases from Sri Usha Pet Stores
           </p>
         </div>
 
         {!user ? (
-          <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-xs max-w-lg mx-auto">
-            <Package size={48} className="mx-auto text-gray-300 mb-3" />
-            <h2 className="text-lg font-bold text-gray-900 mb-1">
+          <div className="rounded-3xl border border-stone-200 bg-white p-12 text-center shadow-xs max-w-lg mx-auto">
+            <Package size={48} className="mx-auto text-stone-300 mb-3" />
+            <h2 className="text-lg font-bold text-stone-900 mb-1">
               Please Sign In to View Your Orders
             </h2>
-            <p className="text-xs text-gray-500 mb-6 max-w-sm mx-auto">
+            <p className="text-xs text-stone-500 mb-6 max-w-sm mx-auto">
               Sign in to your Sri Usha account to access your full order history, receipts, and real-time delivery status.
             </p>
             <div className="flex justify-center gap-3">
               <a
                 href="/account/signin?callbackUrl=/orders"
-                className="rounded-xl bg-[#2563EB] px-6 py-3 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8]"
+                className="rounded-xl bg-[#4A0A0F] px-6 py-3 text-xs font-bold text-white shadow-xs hover:bg-[#360509]"
               >
                 Sign In
               </a>
               <a
                 href="/products"
-                className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                className="rounded-xl border border-stone-300 bg-white px-5 py-3 text-xs font-bold text-stone-700 hover:bg-stone-50"
               >
                 Browse Products
               </a>
             </div>
           </div>
         ) : orders.length === 0 ? (
-          <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-xs max-w-lg mx-auto">
-            <ShoppingBag size={48} className="mx-auto text-gray-300 mb-3" />
-            <h2 className="text-lg font-bold text-gray-900 mb-1">
+          <div className="rounded-3xl border border-stone-200 bg-white p-12 text-center shadow-xs max-w-lg mx-auto">
+            <ShoppingBag size={48} className="mx-auto text-stone-300 mb-3" />
+            <h2 className="text-lg font-bold text-stone-900 mb-1">
               No orders found yet
             </h2>
-            <p className="text-xs text-gray-500 mb-6">
+            <p className="text-xs text-stone-500 mb-6">
               You haven&apos;t placed any orders yet. Start shopping our genuine pet foods and veterinary care products.
             </p>
             <a
               href="/products"
-              className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-6 py-3.5 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8]"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#4A0A0F] px-6 py-3.5 text-xs font-bold text-white shadow-xs hover:bg-[#360509]"
             >
               <span>Explore Products</span>
               <ArrowRight size={15} />
@@ -108,12 +108,12 @@ export default function OrdersPage() {
               <a
                 key={order.id}
                 href={`/orders/${order.id}`}
-                className="group block rounded-3xl border border-gray-200 bg-white p-5 sm:p-6 shadow-xs hover:border-[#2563EB] hover:shadow-md transition-all duration-200"
+                className="group block rounded-3xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs hover:border-[#F97316] hover:shadow-md transition-all duration-200"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                      <span className="text-base font-extrabold text-gray-900 group-hover:text-[#2563EB] transition-colors">
+                      <span className="text-base font-extrabold text-stone-900 group-hover:text-[#4A0A0F] transition-colors">
                         Order #{order.id}
                       </span>
                       <span
@@ -123,12 +123,12 @@ export default function OrdersPage() {
                       >
                         {ORDER_STATUS_METADATA[order.status]?.customerLabel || order.status || "Placed"}
                       </span>
-                      <span className="rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-[10px] font-semibold uppercase">
+                      <span className="rounded-full bg-stone-100 text-stone-600 px-2.5 py-0.5 text-[10px] font-semibold uppercase">
                         {order.payment_method || "COD"}
                       </span>
                     </div>
 
-                    <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <div className="text-xs text-stone-500 flex items-center gap-2">
                       <Clock size={12} />
                       <span>
                         {new Date(order.created_at || Date.now()).toLocaleDateString("en-IN", {
@@ -142,14 +142,14 @@ export default function OrdersPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 border-gray-100 pt-3 sm:pt-0">
+                  <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 border-stone-100 pt-3 sm:pt-0">
                     <div className="text-right">
-                      <div className="text-xs text-gray-400">Total Amount</div>
-                      <div className="text-base font-extrabold text-[#2563EB]">
+                      <div className="text-xs text-stone-400">Total Amount</div>
+                      <div className="text-base font-extrabold text-[#4A0A0F]">
                         ₹{parseFloat(order.total_amount).toFixed(0)}
                       </div>
                     </div>
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50 group-hover:bg-[#EFF6FF] group-hover:text-[#2563EB] transition-colors">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-stone-50 group-hover:bg-[#FFF7ED] group-hover:text-[#F97316] transition-colors">
                       <ChevronRight size={18} />
                     </div>
                   </div>

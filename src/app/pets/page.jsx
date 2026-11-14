@@ -26,14 +26,14 @@ const SPECIES_STYLES = {
     accent: "text-amber-700",
   },
   cat: {
-    badge: "bg-purple-50 text-purple-800 border-purple-200",
-    banner: "from-purple-50 via-white to-pink-50/40",
-    accent: "text-purple-700",
+    badge: "bg-[#FEFCE8] text-[#D97706] border-[#FEF08A]",
+    banner: "from-[#FEFCE8] via-white to-amber-50/40",
+    accent: "text-[#D97706]",
   },
   bird: {
-    badge: "bg-sky-50 text-sky-800 border-sky-200",
-    banner: "from-sky-50 via-white to-cyan-50/40",
-    accent: "text-sky-700",
+    badge: "bg-[#FFFDF0] text-[#B45309] border-[#FDE68A]",
+    banner: "from-[#FFFDF0] via-white to-yellow-50/40",
+    accent: "text-[#B45309]",
   },
   other: {
     badge: "bg-emerald-50 text-emerald-800 border-emerald-200",
@@ -277,15 +277,15 @@ export default function PetFamilyHubPage() {
         <section className="rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-2xs">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#0066CC]">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#F97316]">
                 <PawPrint className="h-3.5 w-3.5" /> Sri Usha Pet Family Hub
               </div>
-              <h1 className="mt-2.5 text-2xl sm:text-3xl font-black tracking-tight text-gray-900">
+              <h1 className="mt-2.5 text-2xl sm:text-3xl font-black tracking-tight text-stone-900">
                 {activePet
                   ? `${activePet.name}'s Care Space`
                   : "Your Pet Care Passport"}
               </h1>
-              <p className="mt-1 text-xs sm:text-sm text-gray-600">
+              <p className="mt-1 text-xs sm:text-sm text-stone-600">
                 Keep each pet&apos;s food, health interests, and store essentials organized in one place.
               </p>
             </div>
@@ -294,14 +294,14 @@ export default function PetFamilyHubPage() {
               <button
                 type="button"
                 onClick={() => setShowOnboarding((prev) => !prev)}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-stone-50"
               >
                 {showOnboarding ? "Close Wizard" : "Guided Pet Setup"}
               </button>
               <button
                 type="button"
                 onClick={openAddPetModal}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0066CC] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0052A3]"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#360509]"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Pet
               </button>
@@ -310,8 +310,8 @@ export default function PetFamilyHubPage() {
 
           {/* Interactive Pet Selector Pills */}
           {pets.length > 0 && (
-            <div className="mt-6 flex flex-wrap items-center gap-2.5 border-t border-gray-100 pt-5">
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400 mr-1">
+            <div className="mt-6 flex flex-wrap items-center gap-2.5 border-t border-stone-100 pt-5">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-stone-400 mr-1">
                 Switch Pet:
               </span>
               {pets.map((pet) => {
@@ -323,8 +323,8 @@ export default function PetFamilyHubPage() {
                     onClick={() => setActivePetId(pet.id)}
                     className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold border transition-all ${
                       isSelected
-                        ? "border-[#0066CC] bg-[#0066CC] text-white shadow-sm"
-                        : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-white hover:border-gray-300"
+                        ? "border-[#4A0A0F] bg-[#4A0A0F] text-white shadow-sm"
+                        : "border-stone-200 bg-stone-50 text-stone-700 hover:bg-white hover:border-stone-300"
                     }`}
                   >
                     {pet.image_url ? (
@@ -423,17 +423,17 @@ export default function PetFamilyHubPage() {
             {/* Care Snapshot Grid */}
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl border border-white bg-white/85 p-4 shadow-2xs">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-gray-900">
-                  <Utensils className="h-4 w-4 text-[#0066CC]" />
+                <div className="flex items-center gap-2 text-xs font-extrabold text-stone-900">
+                  <Utensils className="h-4 w-4 text-[#F97316]" />
                   Nutrition Preference
                 </div>
-                <p className="mt-1.5 text-sm font-bold text-gray-800">
+                <p className="mt-1.5 text-sm font-bold text-stone-800">
                   {activePet.preferences?.food_preference || "Not specified yet"}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white bg-white/85 p-4 shadow-2xs">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-gray-900">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-stone-900">
                   <HeartPulse className="h-4 w-4 text-emerald-600" />
                   Care &amp; Health Focus
                 </div>
@@ -450,7 +450,7 @@ export default function PetFamilyHubPage() {
                       </span>
                     ))
                   ) : (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-stone-500">
                       General pet care &amp; essentials
                     </span>
                   )}
@@ -458,7 +458,7 @@ export default function PetFamilyHubPage() {
               </div>
 
               <div className="rounded-2xl border border-white bg-white/85 p-4 shadow-2xs">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-gray-900">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-stone-900">
                   <Sparkles className="h-4 w-4 text-amber-500" />
                   Quick Category Aisles
                 </div>
@@ -467,7 +467,7 @@ export default function PetFamilyHubPage() {
                     <a
                       key={cat.id}
                       href={`/products?category=${cat.slug}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-[#0066CC] hover:bg-blue-100"
+                      className="inline-flex items-center gap-1 rounded-full bg-[#FFF7ED] px-2.5 py-0.5 text-[11px] font-bold text-[#F97316] hover:bg-[#FED7AA]/40"
                     >
                       {cat.name} <ArrowRight className="h-2.5 w-2.5" />
                     </a>
@@ -483,16 +483,16 @@ export default function PetFamilyHubPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-gray-900">
+                <h2 className="text-lg font-black text-stone-900">
                   Recommended for {activePet.name} {getPetEmoji(activePet.type)}
                 </h2>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-stone-500">
                   Real in-store products matched to {activePet.name}&apos;s species and care preferences
                 </p>
               </div>
               <a
                 href={`/products?category=${activePet.type}`}
-                className="text-xs font-bold text-[#0066CC] hover:underline"
+                className="text-xs font-bold text-[#F97316] hover:underline"
               >
                 Shop All {activePet.type} Care →
               </a>
@@ -503,12 +503,12 @@ export default function PetFamilyHubPage() {
                 {activeRec.products.map((prod) => (
                   <div
                     key={prod.id}
-                    className="flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-2xs"
+                    className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs"
                   >
                     <div>
                       <a
                         href={`/products/${prod.slug || prod.id}`}
-                        className="block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3"
+                        className="block aspect-square overflow-hidden rounded-xl bg-stone-50 mb-3"
                       >
                         {prod.image_url ? (
                           <img
@@ -517,31 +517,31 @@ export default function PetFamilyHubPage() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center text-gray-300">
+                          <div className="flex h-full w-full items-center justify-center text-stone-300">
                             <ShoppingBag className="h-8 w-8" />
                           </div>
                         )}
                       </a>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#0066CC]">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#F97316]">
                         {prod.category_name}
                       </p>
                       <a
                         href={`/products/${prod.slug || prod.id}`}
-                        className="mt-0.5 block text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#0066CC]"
+                        className="mt-0.5 block text-xs font-extrabold text-stone-900 line-clamp-2 hover:text-[#4A0A0F]"
                       >
                         {prod.name}
                       </a>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-gray-100">
-                      <span className="text-sm font-black text-gray-900">
+                    <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-stone-100">
+                      <span className="text-sm font-black text-stone-900">
                         ₹{Number(prod.sale_price || prod.price || 0).toFixed(0)}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleQuickAddToCart(prod)}
                         disabled={(prod.stock_quantity ?? 0) <= 0}
-                        className="rounded-lg bg-[#0066CC] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0052A3] disabled:opacity-40"
+                        className="rounded-lg bg-[#4A0A0F] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#360509] disabled:opacity-40"
                       >
                         {(prod.stock_quantity ?? 0) > 0 ? "Add to Cart" : "Sold Out"}
                       </button>
@@ -550,9 +550,9 @@ export default function PetFamilyHubPage() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-xs text-gray-500">
+              <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center text-xs text-stone-500">
                 Explore all pet products in our{" "}
-                <a href="/products" className="font-bold text-[#0066CC] hover:underline">
+                <a href="/products" className="font-bold text-[#F97316] hover:underline">
                   Store Catalog
                 </a>
                 .
@@ -563,26 +563,26 @@ export default function PetFamilyHubPage() {
 
         {/* Empty State if skipped and no pets */}
         {!activePet && !showOnboarding && (
-          <section className="rounded-3xl border border-dashed border-gray-300 bg-white p-12 text-center">
-            <PawPrint className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <h2 className="text-lg font-black text-gray-900">
+          <section className="rounded-3xl border border-dashed border-stone-300 bg-white p-12 text-center">
+            <PawPrint className="mx-auto h-12 w-12 text-stone-300 mb-3" />
+            <h2 className="text-lg font-black text-stone-900">
               No Pet Passports Yet
             </h2>
-            <p className="mt-1 text-xs text-gray-500 max-w-md mx-auto">
+            <p className="mt-1 text-xs text-stone-500 max-w-md mx-auto">
               Create your pet&apos;s profile to unlock tailored food, grooming, and veterinary care recommendations.
             </p>
             <div className="mt-5 flex justify-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowOnboarding(true)}
-                className="rounded-xl bg-[#0066CC] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0052A3]"
+                className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509]"
               >
                 Start Guided Pet Setup
               </button>
               <button
                 type="button"
                 onClick={openAddPetModal}
-                className="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                className="rounded-xl border border-stone-200 bg-white px-5 py-2.5 text-xs font-bold text-stone-700 hover:bg-stone-50"
               >
                 Quick Add Pet
               </button>
@@ -610,17 +610,17 @@ export default function PetFamilyHubPage() {
                     required
                     value={petForm.name}
                     onChange={(e) => setPetForm({ ...petForm, name: e.target.value })}
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-stone-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
+                  <label className="mb-1 block text-xs font-bold text-stone-700">
                     Type *
                   </label>
                   <select
                     value={petForm.type}
                     onChange={(e) => setPetForm({ ...petForm, type: e.target.value })}
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
+                    className="w-full rounded-xl border border-stone-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   >
                     <option value="dog">Dog</option>
                     <option value="cat">Cat</option>
@@ -629,7 +629,7 @@ export default function PetFamilyHubPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
+                  <label className="mb-1 block text-xs font-bold text-stone-700">
                     Age
                   </label>
                   <input
@@ -637,22 +637,22 @@ export default function PetFamilyHubPage() {
                     value={petForm.age}
                     onChange={(e) => setPetForm({ ...petForm, age: e.target.value })}
                     placeholder="e.g., 2 years"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-stone-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
+                  <label className="mb-1 block text-xs font-bold text-stone-700">
                     Breed (Optional)
                   </label>
                   <input
                     type="text"
                     value={petForm.breed}
                     onChange={(e) => setPetForm({ ...petForm, breed: e.target.value })}
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-stone-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
+                  <label className="mb-1 block text-xs font-bold text-stone-700">
                     Food Preference
                   </label>
                   <input
@@ -662,11 +662,11 @@ export default function PetFamilyHubPage() {
                       setPetForm({ ...petForm, food_preference: e.target.value })
                     }
                     placeholder="e.g., Dry Kibble, Grain-Free"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-stone-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
+                  <label className="mb-1 block text-xs font-bold text-stone-700">
                     Care Interests (comma-separated)
                   </label>
                   <input
@@ -679,7 +679,7 @@ export default function PetFamilyHubPage() {
                       })
                     }
                     placeholder="e.g., Nutrition, Grooming, Supplements"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-stone-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2 flex items-center gap-3">
@@ -687,14 +687,14 @@ export default function PetFamilyHubPage() {
                     <img
                       src={petForm.image_url}
                       alt="Pet"
-                      className="h-12 w-12 rounded-xl object-cover border border-gray-200"
+                      className="h-12 w-12 rounded-xl object-cover border border-stone-200"
                     />
                   ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-lg">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-stone-100 text-lg">
                       {getPetEmoji(petForm.type)}
                     </div>
                   )}
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-stone-200 px-3.5 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50">
                     {uploadingPhoto ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
@@ -716,14 +716,14 @@ export default function PetFamilyHubPage() {
                 <button
                   type="button"
                   onClick={() => setShowPetModal(false)}
-                  className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingPet}
-                  className="rounded-xl bg-[#0066CC] px-5 py-2 text-xs font-bold text-white hover:bg-[#0052A3] disabled:opacity-60"
+                  className="rounded-xl bg-[#4A0A0F] px-5 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
                 >
                   {savingPet ? "Saving..." : editingPet ? "Save Changes" : "Save Pet"}
                 </button>

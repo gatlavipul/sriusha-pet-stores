@@ -168,11 +168,11 @@ export default function OrderDetailPage({ params }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FDFDFD]">
+      <div className="min-h-screen bg-[#FFFDF9]">
         <Header />
         <div className="mx-auto max-w-7xl px-4 py-20 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mx-auto mb-4" />
-          <p className="text-xs text-gray-500 font-medium">Loading order details...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#4A0A0F] border-t-transparent mx-auto mb-4" />
+          <p className="text-xs text-stone-500 font-medium">Loading order details...</p>
         </div>
       </div>
     );
@@ -180,17 +180,17 @@ export default function OrderDetailPage({ params }) {
 
   if (!order) {
     return (
-      <div className="min-h-screen bg-[#FDFDFD]">
+      <div className="min-h-screen bg-[#FFFDF9]">
         <Header />
         <div className="mx-auto max-w-7xl px-4 py-20 text-center">
-          <Package size={48} className="mx-auto text-gray-300 mb-3" />
-          <h2 className="text-lg font-bold text-gray-900">Order not found</h2>
-          <p className="text-xs text-gray-500 mt-1 mb-6">
+          <Package size={48} className="mx-auto text-stone-300 mb-3" />
+          <h2 className="text-lg font-bold text-stone-900">Order not found</h2>
+          <p className="text-xs text-stone-500 mt-1 mb-6">
             We couldn&apos;t find this order. Please verify the order reference number.
           </p>
           <a
             href="/orders"
-            className="rounded-xl bg-[#2563EB] px-5 py-2.5 text-xs font-semibold text-white shadow-xs"
+            className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#360509]"
           >
             Go to My Orders
           </a>
@@ -223,11 +223,11 @@ export default function OrderDetailPage({ params }) {
   const metadata = ORDER_STATUS_METADATA[s] || {
     customerLabel: order.status,
     customerDescription: "Order in progress",
-    badgeClass: "bg-gray-100 text-gray-800 border-gray-200",
+    badgeClass: "bg-stone-100 text-stone-800 border-stone-200",
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] text-[#0F172A]">
+    <div className="min-h-screen bg-[#FFFDF9] text-[#241819]">
       <Header />
 
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -235,7 +235,7 @@ export default function OrderDetailPage({ params }) {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <a
             href="/orders"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 hover:text-[#2563EB] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-stone-600 hover:text-[#4A0A0F] transition-colors"
           >
             <ArrowLeft size={14} />
             <span>Back to All Orders</span>
@@ -325,7 +325,7 @@ export default function OrderDetailPage({ params }) {
                 Payment: {(order.payment_method || "cod").toUpperCase()} ({order.payment_status || "Pending"})
               </span>
               {order.delivery_otp && order.status !== "delivered" && !isCancelled && (
-                <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-extrabold text-[#2563EB]">
+                <span className="rounded-full border border-[#FED7AA] bg-[#FFF7ED] px-3 py-1 text-xs font-extrabold text-[#F97316]">
                   Delivery OTP: {order.delivery_otp}
                 </span>
               )}
@@ -337,8 +337,8 @@ export default function OrderDetailPage({ params }) {
               )}
             </div>
             {order.delivery_instructions && (
-              <p className="mt-2 text-xs text-gray-600">
-                <span className="font-bold text-gray-800">Delivery Note:</span> {order.delivery_instructions}
+              <p className="mt-2 text-xs text-stone-600">
+                <span className="font-bold text-stone-800">Delivery Note:</span> {order.delivery_instructions}
               </p>
             )}
           </div>
@@ -383,12 +383,12 @@ export default function OrderDetailPage({ params }) {
 
           {/* 6-Stage Customer Tracking Progress Timeline (if not cancelled) */}
           {!isCancelled && (
-            <div className="py-6 border-b border-gray-100">
+            <div className="py-6 border-b border-stone-100">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                <div className="text-xs font-bold text-stone-400 uppercase tracking-wider">
                   Live Order Timeline
                 </div>
-                <div className="text-xs text-gray-500 font-medium italic">
+                <div className="text-xs text-stone-500 font-medium italic">
                   {metadata.customerDescription}
                 </div>
               </div>
@@ -413,14 +413,14 @@ export default function OrderDetailPage({ params }) {
                             className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
                               isCompleted
                                 ? isCurrent
-                                  ? "bg-[#2563EB] text-white ring-4 ring-blue-100"
+                                  ? "bg-[#F97316] text-white ring-4 ring-orange-100"
                                   : "bg-emerald-600 text-white"
-                                : "bg-gray-100 text-gray-400"
+                                : "bg-stone-100 text-stone-400"
                             }`}
                           >
                             {isCompleted && !isCurrent ? <Check size={14} strokeWidth={2.5} /> : idx + 1}
                           </div>
-                          <div className={`font-bold text-[11px] leading-tight ${isCompleted ? "text-gray-900" : "text-gray-400"}`}>
+                          <div className={`font-bold text-[11px] leading-tight ${isCompleted ? "text-stone-900" : "text-stone-400"}`}>
                             {stage.label}
                           </div>
                         </div>
@@ -434,19 +434,19 @@ export default function OrderDetailPage({ params }) {
 
           {/* Live Delivery Partner Card (when assigned or out for delivery) */}
           {order.deliveryPartner && (
-            <div className="my-6 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-white p-4 shadow-2xs">
+            <div className="my-6 rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-4 shadow-2xs">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-xs">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4A0A0F] text-white shadow-xs">
                     <Truck size={24} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-gray-900 text-sm">
+                      <span className="font-extrabold text-stone-900 text-sm">
                         {order.deliveryPartner.name}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-800">
-                        <Zap size={10} className="fill-indigo-600 text-indigo-600" />
+                      <span className="inline-flex items-center gap-1 rounded-md bg-[#FFFDF0] px-2 py-0.5 text-[10px] font-bold uppercase text-[#B45309]">
+                        <Zap size={10} className="fill-[#F97316] text-[#F97316]" />
                         <span>Sri Usha Express Rider</span>
                       </span>
                     </div>
@@ -523,13 +523,13 @@ export default function OrderDetailPage({ params }) {
 
           {/* Dispatched Notifications & Order Updates */}
           {notifications && notifications.length > 0 && (
-            <div className="py-6 border-b border-gray-100">
+            <div className="py-6 border-b border-stone-100">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Mail size={14} className="text-[#2563EB]" />
+                <div className="text-xs font-bold text-stone-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Mail size={14} className="text-[#F97316]" />
                   <span>Dispatched Notifications &amp; Customer Updates</span>
                 </div>
-                <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full">
+                <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 px-2.5 py-0.5 rounded-full">
                   {notifications.length} {notifications.length === 1 ? "Message" : "Messages"} Sent
                 </span>
               </div>
@@ -537,16 +537,16 @@ export default function OrderDetailPage({ params }) {
                 {notifications.map((notif) => (
                   <div
                     key={notif.id}
-                    className="p-3.5 rounded-2xl border border-gray-100 bg-gray-50/70 hover:bg-gray-50 transition-colors"
+                    className="p-3.5 rounded-2xl border border-stone-100 bg-stone-50/70 hover:bg-stone-50 transition-colors"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-2">
                         <span
                           className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
                             notif.channel === "email"
-                              ? "bg-blue-100 text-blue-700"
+                              ? "bg-amber-100 text-amber-800"
                               : notif.channel === "sms"
-                              ? "bg-amber-100 text-amber-700"
+                              ? "bg-orange-100 text-orange-800"
                               : "bg-emerald-100 text-emerald-700"
                           }`}
                         >
@@ -557,9 +557,9 @@ export default function OrderDetailPage({ params }) {
                           )}
                           {notif.channel}
                         </span>
-                        <span className="text-xs font-bold text-gray-900">{notif.title}</span>
+                        <span className="text-xs font-bold text-stone-900">{notif.title}</span>
                       </div>
-                      <span className="text-[11px] text-gray-400">
+                      <span className="text-[11px] text-stone-400">
                         {new Date(notif.created_at).toLocaleTimeString("en-IN", {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -568,7 +568,7 @@ export default function OrderDetailPage({ params }) {
                         })}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-600 leading-relaxed font-sans">{notif.content}</p>
+                    <p className="text-xs text-stone-600 leading-relaxed font-sans">{notif.content}</p>
                   </div>
                 ))}
               </div>
@@ -576,15 +576,15 @@ export default function OrderDetailPage({ params }) {
           )}
 
           {/* Customer & Shipping Details Grid */}
-          <div className="py-6 grid gap-6 sm:grid-cols-2 text-xs border-b border-gray-100">
+          <div className="py-6 grid gap-6 sm:grid-cols-2 text-xs border-b border-stone-100">
             <div>
-              <div className="font-bold text-gray-400 uppercase tracking-wider mb-2">
+              <div className="font-bold text-stone-400 uppercase tracking-wider mb-2">
                 Shipping &amp; Recipient
               </div>
-              <p className="font-bold text-gray-900 text-sm">{order.customer_name}</p>
-              <p className="text-gray-600 mt-1">{order.customer_phone}</p>
-              <p className="text-gray-600">{order.customer_email}</p>
-              <div className="mt-2 text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-200">
+              <p className="font-bold text-stone-900 text-sm">{order.customer_name}</p>
+              <p className="text-stone-600 mt-1">{order.customer_phone}</p>
+              <p className="text-stone-600">{order.customer_email}</p>
+              <div className="mt-2 text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200">
                 <div className="flex items-start gap-1.5">
                   <MapPin size={14} className="text-[#EA580C] shrink-0 mt-0.5" />
                   <span>
@@ -595,19 +595,19 @@ export default function OrderDetailPage({ params }) {
             </div>
 
             <div>
-              <div className="font-bold text-gray-400 uppercase tracking-wider mb-2">
+              <div className="font-bold text-stone-400 uppercase tracking-wider mb-2">
                 Payment Breakdown
               </div>
-              <div className="space-y-2 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <div className="flex justify-between text-gray-600">
+              <div className="space-y-2 bg-stone-50 p-4 rounded-xl border border-stone-200">
+                <div className="flex justify-between text-stone-600">
                   <span>Method</span>
-                  <span className="font-bold text-gray-900">
+                  <span className="font-bold text-stone-900">
                     {order.payment_method === "cod"
                       ? "Cash on Delivery (COD)"
                       : "Online (Razorpay)"}
                   </span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-stone-600">
                   <span>Delivery Charge</span>
                   <span className="font-bold text-emerald-700">
                     {parseFloat(order.delivery_charge || 0) === 0
@@ -615,9 +615,9 @@ export default function OrderDetailPage({ params }) {
                       : `₹${parseFloat(order.delivery_charge || 0).toFixed(0)}`}
                   </span>
                 </div>
-                <div className="pt-2 border-t border-gray-200 flex justify-between font-extrabold text-sm text-gray-900">
+                <div className="pt-2 border-t border-stone-200 flex justify-between font-extrabold text-sm text-stone-900">
                   <span>Total Amount</span>
-                  <span className="text-base text-[#2563EB]">
+                  <span className="text-base text-[#4A0A0F]">
                     ₹{parseFloat(order.total_amount).toFixed(0)}
                   </span>
                 </div>
@@ -626,13 +626,13 @@ export default function OrderDetailPage({ params }) {
           </div>
 
           {/* Support and Store Help */}
-          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500 border-t border-gray-100 mt-6">
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500 border-t border-stone-100 mt-6">
             <div className="flex flex-wrap items-center gap-3">
               <span>Need help with this order?</span>
               <button
                 type="button"
                 onClick={() => setShowSupportModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-[#2563EB] hover:bg-blue-100 transition-colors shadow-2xs"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-3.5 py-1.5 text-xs font-bold text-[#F97316] hover:bg-[#FED7AA]/40 transition-colors shadow-2xs"
               >
                 <HelpCircle size={14} />
                 <span>Report Issue / Support Ticket</span>
@@ -753,17 +753,17 @@ export default function OrderDetailPage({ params }) {
       {showSupportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
           <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-xl border border-gray-100">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
-              <div className="flex items-center gap-2 text-blue-600">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
+              <div className="flex items-center gap-2 text-[#F97316]">
                 <HelpCircle size={20} />
-                <h3 className="text-sm font-extrabold text-gray-900">
+                <h3 className="text-sm font-extrabold text-stone-900">
                   Report an Issue — Order {orderNumber}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowSupportModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-stone-400 hover:text-stone-600 p-1"
                 aria-label="Close support modal"
               >
                 <X size={16} strokeWidth={1.75} />
@@ -772,11 +772,11 @@ export default function OrderDetailPage({ params }) {
 
             <form onSubmit={handleSubmitTicket} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Issue Category</label>
+                <label className="block font-bold text-stone-700 mb-1">Issue Category</label>
                 <select
                   value={supportCategory}
                   onChange={(e) => setSupportCategory(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white p-2.5 outline-none focus:border-[#2563EB]"
+                  className="w-full rounded-xl border border-stone-200 bg-white p-2.5 outline-none focus:border-[#F97316]"
                 >
                   <option value="delivery_delay">Delivery Delay / Track Rider</option>
                   <option value="missing_product">Missing Product from Package</option>
@@ -789,26 +789,26 @@ export default function OrderDetailPage({ params }) {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Subject</label>
+                <label className="block font-bold text-stone-700 mb-1">Subject</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. 1 can of wet food missing from package"
                   value={supportSubject}
                   onChange={(e) => setSupportSubject(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white p-2.5 outline-none focus:border-[#2563EB]"
+                  className="w-full rounded-xl border border-stone-200 bg-white p-2.5 outline-none focus:border-[#F97316]"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Description</label>
+                <label className="block font-bold text-stone-700 mb-1">Description</label>
                 <textarea
                   required
                   rows={4}
                   placeholder="Please provide details (e.g. batch number, delivery time, damaged item details)..."
                   value={supportDesc}
                   onChange={(e) => setSupportDesc(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white p-2.5 outline-none focus:border-[#2563EB]"
+                  className="w-full rounded-xl border border-stone-200 bg-white p-2.5 outline-none focus:border-[#F97316]"
                 />
               </div>
 
@@ -829,14 +829,14 @@ export default function OrderDetailPage({ params }) {
                   type="button"
                   onClick={() => setShowSupportModal(false)}
                   disabled={submittingSupport}
-                  className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingSupport}
-                  className="rounded-xl bg-[#2563EB] px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="rounded-xl bg-[#4A0A0F] px-5 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-50"
                 >
                   {submittingSupport ? "Submitting..." : "Submit Ticket"}
                 </button>

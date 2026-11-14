@@ -1,8 +1,8 @@
-import { ShoppingBag, Plus, Minus, Check, AlertCircle, Clock, Heart, Star, Zap } from "lucide-react";
+import { Plus, Minus, AlertCircle, Clock, Heart, Star } from "lucide-react";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
 
-export default function ProductCard({ product, deliveryBadge = "30-60m Delivery" }) {
+export default function ProductCard({ product }) {
   const { items, addToCart, updateQuantity, removeFromCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
@@ -59,10 +59,10 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
   };
 
   return (
-    <div className="group flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-3.5 sm:p-4 shadow-xs hover:border-[#F97316]/60 hover:shadow-lg transition-all duration-200 relative">
+    <div className="group flex flex-col justify-between rounded-2xl border border-stone-200/80 bg-white p-3.5 sm:p-4 shadow-2xs hover:border-[#F97316]/60 hover:shadow-lg transition-all duration-200 relative">
       <div>
         {/* Top Badges & Image */}
-        <div className="relative block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3">
+        <div className="relative block aspect-square overflow-hidden rounded-xl bg-stone-50 mb-3">
           <a href={`/products/${product.slug || product.id}`} className="block h-full w-full">
             <img
               src={product.image_url}
@@ -73,19 +73,13 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
             />
           </a>
 
-          {/* Quick-Commerce Fast Delivery Pill */}
-          {deliveryBadge && (
-            <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-              <span className="inline-flex items-center gap-1 rounded-md bg-[#4A0A0F]/90 backdrop-blur-xs px-2 py-0.5 text-[9px] font-black uppercase text-[#FACC15] tracking-wider shadow-xs">
-                <Zap size={10} className="fill-[#FACC15] text-[#FACC15]" />
-                <span>{deliveryBadge}</span>
+          {/* Bestseller Badge (Only shown if genuinely marked bestseller in DB) */}
+          {isBestSeller && (
+            <div className="absolute top-2 left-2">
+              <span className="inline-flex items-center gap-1 rounded-md bg-[#F97316] text-white font-extrabold text-[9px] px-1.5 py-0.5 uppercase tracking-wider shadow-xs">
+                <Star size={9} className="fill-white text-white" />
+                <span>Bestseller</span>
               </span>
-              {isBestSeller && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-[#F97316] text-white font-extrabold text-[9px] px-1.5 py-0.5 uppercase tracking-wider shadow-xs">
-                  <Star size={9} className="fill-white text-white" />
-                  <span>Bestseller</span>
-                </span>
-              )}
             </div>
           )}
 
@@ -101,7 +95,7 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
             className={`absolute top-2 right-2 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full shadow-xs transition-colors ${
               isWishlisted
                 ? "bg-rose-50 text-rose-600 border border-rose-200"
-                : "bg-white/90 text-gray-400 hover:text-rose-500 border border-gray-200"
+                : "bg-white/90 text-stone-400 hover:text-rose-500 border border-stone-200"
             }`}
           >
             <Heart size={13} className={isWishlisted ? "fill-rose-500" : ""} />
@@ -132,12 +126,12 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
         {/* Brand & Category */}
         <div className="flex items-center gap-1.5 mb-1 text-[10px]">
           {product.brand && (
-            <span className="font-extrabold uppercase tracking-wider text-gray-500 truncate">
+            <span className="font-extrabold uppercase tracking-wider text-stone-500 truncate">
               {product.brand}
             </span>
           )}
           {product.category_name && (
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600 font-medium truncate">
+            <span className="rounded bg-stone-100 px-1.5 py-0.5 text-stone-600 font-medium truncate">
               {product.category_name}
             </span>
           )}
@@ -146,27 +140,29 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
         {/* Product Title */}
         <a
           href={`/products/${product.slug || product.id}`}
-          className="text-xs sm:text-sm font-bold text-gray-900 group-hover:text-[#2563EB] transition-colors line-clamp-2 leading-snug"
+          className="text-xs sm:text-sm font-bold text-[#241819] group-hover:text-[#4A0A0F] transition-colors line-clamp-2 leading-snug"
         >
           {product.name}
         </a>
 
-        {/* Rating */}
-        <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
-          <Star size={12} className="fill-amber-400 text-amber-400" />
-          <span className="font-bold text-gray-700">4.8</span>
-          <span className="text-gray-400">({product.review_count || 36})</span>
-        </div>
+        {/* Genuine Rating (Only displayed when review data exists in DB) */}
+        {product.review_count && product.review_count > 0 ? (
+          <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
+            <Star size={12} className="fill-amber-400 text-amber-400" />
+            <span className="font-bold text-stone-700">{Number(product.rating || 5).toFixed(1)}</span>
+            <span className="text-stone-400">({product.review_count})</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Bottom: Pricing & Quick Add / Quantity Stepper */}
-      <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
+      <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between gap-2">
         <div>
-          <div className="text-base sm:text-lg font-black text-gray-900 leading-none">
+          <div className="text-base sm:text-lg font-black text-[#241819] leading-none">
             ₹{product.price}
           </div>
           {product.compare_price && (
-            <div className="text-[11px] text-gray-400 line-through mt-0.5">
+            <div className="text-[11px] text-stone-400 line-through mt-0.5">
               ₹{(parseFloat(product.price) + parseFloat(product.compare_price)).toFixed(0)}
             </div>
           )}
@@ -176,29 +172,31 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
         {isOutOfStock ? (
           <button
             disabled
-            className="rounded-xl border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-400 cursor-not-allowed"
+            className="rounded-xl border border-stone-200 bg-stone-100 px-3 py-1.5 text-xs font-bold text-stone-400 cursor-not-allowed"
           >
             Sold Out
           </button>
         ) : cartQty > 0 ? (
-          <div className="inline-flex items-center rounded-xl border border-[#2563EB] bg-[#EFF6FF] shadow-xs overflow-hidden">
+          <div className="inline-flex items-center rounded-xl border border-[#4A0A0F] bg-[#FFF7ED] shadow-xs overflow-hidden">
             <button
               type="button"
               onClick={handleDecrement}
-              className="p-1.5 sm:p-2 text-[#2563EB] hover:bg-[#DBEAFE] transition-colors"
+              className="p-1.5 sm:p-2 text-[#4A0A0F] hover:bg-[#FED7AA] transition-colors"
               title="Decrease quantity"
+              aria-label="Decrease quantity"
             >
               <Minus size={13} strokeWidth={2.5} />
             </button>
-            <span className="min-w-6 text-center text-xs font-black text-[#1E40AF]">
+            <span className="min-w-6 text-center text-xs font-black text-[#4A0A0F]">
               {cartQty}
             </span>
             <button
               type="button"
               onClick={handleIncrement}
               disabled={cartQty >= stock}
-              className="p-1.5 sm:p-2 text-[#2563EB] hover:bg-[#DBEAFE] transition-colors disabled:opacity-30"
+              className="p-1.5 sm:p-2 text-[#4A0A0F] hover:bg-[#FED7AA] transition-colors disabled:opacity-30"
               title="Increase quantity"
+              aria-label="Increase quantity"
             >
               <Plus size={13} strokeWidth={2.5} />
             </button>
@@ -207,7 +205,8 @@ export default function ProductCard({ product, deliveryBadge = "30-60m Delivery"
           <button
             type="button"
             onClick={handleAdd}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#2563EB] px-3.5 py-1.5 sm:py-2 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-3.5 py-1.5 sm:py-2 text-xs font-bold text-white shadow-xs hover:bg-[#360509] transition-all"
+            aria-label={`Add ${product.name} to cart`}
           >
             <Plus size={13} strokeWidth={2.5} />
             <span>ADD</span>

@@ -122,7 +122,7 @@ export default function ProductsPage() {
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="text-xs text-gray-500 font-medium mb-1">
-              <a href="/" className="hover:text-[#2563EB]">Home</a>
+              <a href="/" className="hover:text-[#4A0A0F]">Home</a>
               {" / "}
               <span className="text-gray-900 font-semibold">Products</span>
             </div>
@@ -150,7 +150,7 @@ export default function ProductsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search in products..."
-              className="w-full rounded-xl border border-gray-300 bg-white py-2 pl-9 pr-8 text-xs sm:text-sm outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all"
+              className="w-full rounded-xl border border-gray-300 bg-white py-2 pl-9 pr-8 text-xs sm:text-sm outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 transition-all"
             />
             {searchQuery && (
               <button
@@ -175,7 +175,7 @@ export default function ProductsPage() {
                 onClick={() => setSelectedCategory("")}
                 className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
                   selectedCategory === ""
-                    ? "bg-[#2563EB] text-white shadow-xs"
+                    ? "bg-[#4A0A0F] text-white shadow-xs"
                     : "border border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100"
                 }`}
               >
@@ -187,7 +187,7 @@ export default function ProductsPage() {
                   onClick={() => setSelectedCategory(category.slug)}
                   className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
                     selectedCategory === category.slug
-                      ? "bg-[#2563EB] text-white shadow-xs"
+                      ? "bg-[#4A0A0F] text-white shadow-xs"
                       : "border border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100"
                   }`}
                 >
@@ -236,7 +236,7 @@ export default function ProductsPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="rounded-lg border border-gray-300 bg-white py-1 px-2.5 text-xs font-semibold text-gray-700 outline-none focus:border-[#2563EB]"
+                className="rounded-lg border border-gray-300 bg-white py-1 px-2.5 text-xs font-semibold text-gray-700 outline-none focus:border-[#F97316]"
               >
                 <option value="featured">Featured / Default</option>
                 <option value="price_asc">Price: Low to High</option>
@@ -282,7 +282,7 @@ export default function ProductsPage() {
             </p>
             <button
               onClick={handleClearFilters}
-              className="rounded-xl bg-[#2563EB] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#1D4ED8]"
+              className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#360509]"
             >
               Reset Filters
             </button>
@@ -293,7 +293,6 @@ export default function ProductsPage() {
               <ProductCard
                 key={product.id}
                 product={product}
-                deliveryBadge="30-60m Delivery"
               />
             ))}
           </div>

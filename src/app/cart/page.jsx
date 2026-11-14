@@ -84,35 +84,35 @@ export default function CartPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FDFDFD]">
+      <div className="min-h-screen bg-[#FFFDF9]">
         <Header />
         <div className="mx-auto max-w-7xl px-4 py-20 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mx-auto mb-4" />
-          <p className="text-xs text-gray-500 font-medium">Loading your shopping cart...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#4A0A0F] border-t-transparent mx-auto mb-4" />
+          <p className="text-xs text-stone-500 font-medium">Loading your shopping cart...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] text-[#0F172A]">
+    <div className="min-h-screen bg-[#FFFDF9] text-[#241819]">
       <Header />
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Title */}
-        <div className="mb-8 flex items-baseline justify-between border-b border-gray-200 pb-4">
+        <div className="mb-8 flex items-baseline justify-between border-b border-stone-200 pb-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-900">
               Shopping Cart
             </h1>
-            <p className="mt-1 text-xs sm:text-sm text-gray-500">
+            <p className="mt-1 text-xs sm:text-sm text-stone-500">
               Review your items and proceed to secure checkout
             </p>
           </div>
           {items.length > 0 && (
             <button
               onClick={clearCart}
-              className="text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors"
+              className="text-xs font-semibold text-stone-400 hover:text-red-600 transition-colors"
             >
               Clear Cart
             </button>
@@ -120,19 +120,19 @@ export default function CartPage() {
         </div>
 
         {items.length === 0 ? (
-          <div className="rounded-3xl border border-gray-200 bg-white p-12 sm:p-16 text-center shadow-xs max-w-xl mx-auto my-8">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-[#2563EB] mb-4">
+          <div className="rounded-3xl border border-stone-200 bg-white p-12 sm:p-16 text-center shadow-xs max-w-xl mx-auto my-8">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#FFF7ED] text-[#F97316] mb-4">
               <ShoppingBag size={36} />
             </div>
-            <h2 className="text-xl font-extrabold text-gray-900 mb-1">
+            <h2 className="text-xl font-extrabold text-stone-900 mb-1">
               Your Cart is Empty
             </h2>
-            <p className="text-xs sm:text-sm text-gray-500 mb-8 max-w-sm mx-auto">
+            <p className="text-xs sm:text-sm text-stone-500 mb-8 max-w-sm mx-auto">
               Looks like you haven&apos;t added any pet supplies yet. Explore our genuine veterinary food, treats, and healthcare items!
             </p>
             <a
               href="/products"
-              className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-6 py-3.5 text-xs font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#4A0A0F] px-6 py-3.5 text-xs font-bold text-white shadow-xs hover:bg-[#360509] transition-all"
             >
               <span>Start Shopping Now</span>
               <ArrowRight size={16} />
@@ -143,10 +143,10 @@ export default function CartPage() {
             {/* Left Items Column (8 cols) */}
             <div className="lg:col-span-8 space-y-4">
               {/* Free Delivery Meter Banner */}
-              <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/60 p-4 shadow-2xs">
-                <div className="flex items-center justify-between text-xs font-bold text-gray-800 mb-2">
+              <div className="rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-4 shadow-2xs">
+                <div className="flex items-center justify-between text-xs font-bold text-stone-800 mb-2">
                   <div className="flex items-center gap-1.5">
-                    <Truck size={16} className="text-[#2563EB]" />
+                    <Truck size={16} className="text-[#F97316]" />
                     {isFreeShipping ? (
                       <span className="inline-flex items-center gap-1 text-emerald-700 font-extrabold">
                         <Sparkles size={14} className="text-emerald-600" /> Congratulations! You unlocked FREE Delivery!
@@ -161,13 +161,14 @@ export default function CartPage() {
                       </span>
                     )}
                   </div>
-                  <span className="text-gray-500">{freeShippingProgress}%</span>
+                  <span className="text-stone-500">{freeShippingProgress}%</span>
                 </div>
                 {/* Progress bar */}
-                <div className="h-2 w-full overflow-hidden rounded-full bg-blue-100">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[#FED7AA]/50">
                   <div
-                    className={`h-full transition-all duration-300 ${isFreeShipping ? "bg-emerald-500" : "bg-[#2563EB]"
-                      }`}
+                    className={`h-full transition-all duration-300 ${
+                      isFreeShipping ? "bg-emerald-500" : "bg-[#F97316]"
+                    }`}
                     style={{ width: `${freeShippingProgress}%` }}
                   />
                 </div>
@@ -279,9 +280,9 @@ export default function CartPage() {
                     )}
                   </div>
 
-                  <div className="pt-3 border-t border-gray-100 flex justify-between text-sm font-extrabold text-gray-900">
+                  <div className="pt-3 border-t border-stone-100 flex justify-between text-sm font-extrabold text-stone-900">
                     <span>Grand Total</span>
-                    <span className="text-lg text-[#2563EB]">
+                    <span className="text-lg text-[#4A0A0F]">
                       ₹{grandTotal.toFixed(0)}
                     </span>
                   </div>
@@ -293,42 +294,43 @@ export default function CartPage() {
                     <div className="relative flex-1">
                       <Tag
                         size={14}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
                       />
                       <input
                         type="text"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
                         placeholder="Coupon code (e.g. USHA10)"
-                        className="w-full rounded-xl border border-gray-300 py-2 pl-8 pr-3 text-xs uppercase outline-none focus:border-[#2563EB]"
+                        className="w-full rounded-xl border border-stone-300 py-2 pl-8 pr-3 text-xs uppercase outline-none focus:border-[#F97316]"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-bold text-white hover:bg-black transition-colors"
+                      className="rounded-xl bg-[#241819] px-4 py-2 text-xs font-bold text-white hover:bg-black transition-colors"
                     >
                       Apply
                     </button>
                   </div>
                   {couponMessage && (
                     <div
-                      className={`mt-2 text-[11px] font-medium ${couponMessage.type === "success"
+                      className={`mt-2 text-[11px] font-medium ${
+                        couponMessage.type === "success"
                           ? "text-emerald-700"
                           : "text-red-600"
-                        }`}
+                      }`}
                     >
                       {couponMessage.text}
                     </div>
                   )}
-                  <div className="mt-1 text-[10px] text-gray-400">
-                    Tip: Use <span className="font-bold text-gray-600">USHA10</span> for 10% off
+                  <div className="mt-1 text-[10px] text-stone-400">
+                    Tip: Use <span className="font-bold text-stone-600">USHA10</span> for 10% off
                   </div>
                 </form>
 
                 {/* Proceed to Checkout Button */}
                 <a
                   href="/checkout"
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3.5 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#4A0A0F] py-3.5 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#360509] transition-all"
                 >
                   <span>Proceed to Checkout</span>
                   <ArrowRight size={16} />

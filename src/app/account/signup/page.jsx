@@ -210,9 +210,9 @@ export default function SignUpPage() {
             fallbackRedirectUrl: safeCallback,
             appearance: {
               variables: {
-                colorPrimary: "#2563EB",
-                colorText: "#0F172A",
-                colorTextSecondary: "#475569",
+                colorPrimary: "#4A0A0F",
+                colorText: "#241819",
+                colorTextSecondary: "#57534E",
                 borderRadius: "1rem",
                 fontFamily: "inherit",
               },
@@ -220,14 +220,14 @@ export default function SignUpPage() {
                 rootBox: "w-full mx-auto",
                 card: "w-full shadow-none border-0 bg-transparent p-0",
                 cardBox: "w-full shadow-none border-0 bg-transparent",
-                headerTitle: "text-xl font-extrabold text-slate-900",
-                headerSubtitle: "text-xs text-slate-500",
+                headerTitle: "text-xl font-extrabold text-stone-900",
+                headerSubtitle: "text-xs text-stone-500",
                 socialButtonsBlockButton:
-                  "rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors",
+                  "rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors",
                 formButtonPrimary:
-                  "rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-sm font-bold shadow-xs",
+                  "rounded-xl bg-[#4A0A0F] hover:bg-[#360509] text-sm font-bold shadow-xs",
                 formFieldInput:
-                  "rounded-xl border-slate-300 focus:border-[#2563EB] focus:ring-[#2563EB]",
+                  "rounded-xl border-stone-300 focus:border-[#F97316] focus:ring-[#F97316]",
                 footer: "hidden",
               },
             },
@@ -290,12 +290,12 @@ export default function SignUpPage() {
 
   if (redirecting) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FDFDFD] p-4">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#2563EB] border-t-transparent mb-4" />
-        <p className="text-sm font-bold text-slate-800">
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FFFDF9] p-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4A0A0F] border-t-transparent mb-4" />
+        <p className="text-sm font-bold text-stone-800">
           Setting up your customer account...
         </p>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-stone-500 mt-1">
           Saving your cart &amp; preparing your Sri Usha pet care portal
         </p>
       </div>
@@ -313,7 +313,7 @@ export default function SignUpPage() {
       icon: Package,
       title: "Order tracking",
       desc: "Watch your pet supplies move from our Uppal vet hub to your door.",
-      accent: "bg-blue-50 text-[#2563EB] border-blue-100",
+      accent: "bg-[#FFF7ED] text-[#F97316] border-[#FED7AA]",
     },
     {
       icon: Heart,
@@ -361,10 +361,10 @@ export default function SignUpPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         <div className="mx-auto w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* LEFT COLUMN — Onboarding Benefits */}
-          <section className="lg:col-span-6 relative overflow-hidden rounded-3xl border border-blue-100/90 bg-gradient-to-br from-white via-[#F0F7FF] to-[#FFF4E8] p-6 sm:p-10 shadow-sm">
+          <section className="lg:col-span-6 relative overflow-hidden rounded-3xl border border-amber-100/90 bg-gradient-to-br from-white via-[#FFFDF9] to-[#FFF4E8] p-6 sm:p-10 shadow-sm">
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -right-8 -top-8 h-44 w-44 rounded-full bg-blue-100/50 blur-2xl"
+              className="pointer-events-none absolute -right-8 -top-8 h-44 w-44 rounded-full bg-amber-100/50 blur-2xl"
             />
             <div
               aria-hidden="true"
@@ -447,14 +447,14 @@ export default function SignUpPage() {
               </span>
             </div>
 
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-8 shadow-xl shadow-slate-200/50">
+            <div className="rounded-3xl border border-stone-200/90 bg-white p-5 sm:p-8 shadow-xl shadow-stone-200/50">
               {!clerkLoaded && !mountFallback && (
                 <div className="py-12 flex flex-col items-center justify-center text-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
-                  <p className="text-sm font-bold text-slate-800">
+                  <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#4A0A0F] border-t-transparent mb-3" />
+                  <p className="text-sm font-bold text-stone-800">
                     Connecting to Clerk Registration...
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-stone-500 mt-1">
                     Preparing your secure customer account setup
                   </p>
                 </div>
@@ -468,20 +468,20 @@ export default function SignUpPage() {
 
               {mountFallback && !clerkLoaded && hostedSignUpUrl && (
                 <div className="py-6 text-center space-y-4">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF7ED] text-[#F97316]">
                     <ShieldCheck size={24} />
                   </div>
                   <div>
-                    <h2 className="text-base font-bold text-slate-900">
+                    <h2 className="text-base font-bold text-stone-900">
                       Continue to Clerk Sign-Up
                     </h2>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-stone-500 mt-1">
                       Click below to create your customer account securely on Clerk.
                     </p>
                   </div>
                   <a
                     href={hostedSignUpUrl}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#4A0A0F] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#360509] transition-all"
                   >
                     <span>Create Account with Clerk</span>
                     <ExternalLink size={15} />
@@ -489,19 +489,19 @@ export default function SignUpPage() {
                 </div>
               )}
 
-              <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <p className="text-slate-500">
+              <div className="mt-6 pt-5 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <p className="text-stone-500">
                   Already have an account?{" "}
                   <a
                     href={signInHref}
-                    className="font-bold text-[#2563EB] hover:underline"
+                    className="font-bold text-[#F97316] hover:underline"
                   >
                     Sign In →
                   </a>
                 </p>
                 <a
                   href="/"
-                  className="inline-flex items-center gap-1 font-medium text-slate-500 hover:text-slate-900 transition-colors"
+                  className="inline-flex items-center gap-1 font-medium text-stone-500 hover:text-stone-900 transition-colors"
                 >
                   <span>← Back to Store</span>
                 </a>

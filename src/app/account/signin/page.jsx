@@ -247,9 +247,9 @@ export default function SignInPage() {
             fallbackRedirectUrl: rawCallback,
             appearance: {
               variables: {
-                colorPrimary: "#2563EB",
-                colorText: "#0F172A",
-                colorTextSecondary: "#475569",
+                colorPrimary: "#4A0A0F",
+                colorText: "#241819",
+                colorTextSecondary: "#57534E",
                 borderRadius: "1rem",
                 fontFamily: "inherit",
               },
@@ -257,14 +257,14 @@ export default function SignInPage() {
                 rootBox: "w-full mx-auto",
                 card: "w-full shadow-none border-0 bg-transparent p-0",
                 cardBox: "w-full shadow-none border-0 bg-transparent",
-                headerTitle: "text-xl font-extrabold text-slate-900",
-                headerSubtitle: "text-xs text-slate-500",
+                headerTitle: "text-xl font-extrabold text-stone-900",
+                headerSubtitle: "text-xs text-stone-500",
                 socialButtonsBlockButton:
-                  "rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors",
+                  "rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors",
                 formButtonPrimary:
-                  "rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-sm font-bold shadow-xs",
+                  "rounded-xl bg-[#4A0A0F] hover:bg-[#360509] text-sm font-bold shadow-xs",
                 formFieldInput:
-                  "rounded-xl border-slate-300 focus:border-[#2563EB] focus:ring-[#2563EB]",
+                  "rounded-xl border-stone-300 focus:border-[#F97316] focus:ring-[#F97316]",
                 footer: "hidden",
               },
             },
@@ -327,12 +327,12 @@ export default function SignInPage() {
 
   if (redirecting) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FDFDFD] p-4">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#2563EB] border-t-transparent mb-4" />
-        <p className="text-sm font-bold text-slate-800">
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FFFDF9] p-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4A0A0F] border-t-transparent mb-4" />
+        <p className="text-sm font-bold text-stone-800">
           Verifying your Sri Usha store account...
         </p>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-stone-500 mt-1">
           Syncing cart items &amp; preparing your dashboard
         </p>
       </div>
@@ -482,14 +482,14 @@ export default function SignInPage() {
               </div>
             )}
 
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-8 shadow-xl shadow-slate-200/50">
+            <div className="rounded-3xl border border-stone-200/90 bg-white p-5 sm:p-8 shadow-xl shadow-stone-200/50">
               {!clerkLoaded && !mountFallback && (
                 <div className="py-12 flex flex-col items-center justify-center text-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent mb-3" />
-                  <p className="text-sm font-bold text-slate-800">
+                  <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#4A0A0F] border-t-transparent mb-3" />
+                  <p className="text-sm font-bold text-stone-800">
                     Connecting to Clerk Secure Sign-In...
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-stone-500 mt-1">
                     Loading your protected authentication options
                   </p>
                 </div>
@@ -505,20 +505,20 @@ export default function SignInPage() {
               {/* Hosted Fallback if script is blocked */}
               {mountFallback && !clerkLoaded && hostedSignInUrl && (
                 <div className="py-6 text-center space-y-4">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#2563EB]">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF7ED] text-[#F97316]">
                     <ShieldCheck size={24} />
                   </div>
                   <div>
-                    <h2 className="text-base font-bold text-slate-900">
+                    <h2 className="text-base font-bold text-stone-900">
                       Continue to Clerk Sign-In
                     </h2>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-stone-500 mt-1">
                       Open Clerk&apos;s verified portal to sign in securely to your Sri Usha account.
                     </p>
                   </div>
                   <a
                     href={hostedSignInUrl}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#2563EB] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#1D4ED8] transition-all"
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#4A0A0F] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#360509] transition-all"
                   >
                     <span>Sign In with Clerk</span>
                     <ExternalLink size={15} />
@@ -527,19 +527,19 @@ export default function SignInPage() {
               )}
 
               {/* Clear Sign-Up Path & Back to Store */}
-              <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <p className="text-slate-500">
+              <div className="mt-6 pt-5 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <p className="text-stone-500">
                   New pet parent?{" "}
                   <a
                     href={signUpHref}
-                    className="font-bold text-[#2563EB] hover:underline"
+                    className="font-bold text-[#F97316] hover:underline"
                   >
                     Create Free Account →
                   </a>
                 </p>
                 <a
                   href="/"
-                  className="inline-flex items-center gap-1 font-medium text-slate-500 hover:text-slate-900 transition-colors"
+                  className="inline-flex items-center gap-1 font-medium text-stone-500 hover:text-stone-900 transition-colors"
                 >
                   <span>← Back to Store</span>
                 </a>

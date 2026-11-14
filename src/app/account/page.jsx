@@ -36,12 +36,12 @@ import {
 
 const STATUS_BADGE = {
   delivered: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  out_for_delivery: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  out_for_delivery: "bg-orange-50 text-[#EA580C] border-orange-200",
   delivery_failed: "bg-rose-50 text-rose-700 border-rose-200",
-  ready_for_delivery: "bg-purple-50 text-purple-700 border-purple-200",
-  assigned: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  ready_for_delivery: "bg-amber-50 text-amber-800 border-amber-200",
+  assigned: "bg-[#FFF7ED] text-[#F97316] border-[#FED7AA]",
   packing: "bg-amber-50 text-amber-700 border-amber-200",
-  confirmed: "bg-blue-50 text-blue-700 border-blue-200",
+  confirmed: "bg-[#FEFCE8] text-[#D97706] border-[#FEF08A]",
   cancelled: "bg-red-50 text-red-700 border-red-200",
 };
 
@@ -648,21 +648,21 @@ export default function CustomerAccountPage() {
         )}
 
         {/* Header Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0066CC] text-xl font-black text-white shadow-sm">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4A0A0F] text-xl font-black text-white shadow-sm">
               {displayName.charAt(0).toUpperCase()}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-gray-900">
+                <h1 className="text-xl font-black text-stone-900">
                   {displayName}
                 </h1>
-                <span className="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#0066CC]">
+                <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#F97316]">
                   {userRole.replace("_", " ")}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">{displayEmail}</p>
+              <p className="text-xs text-stone-500 mt-0.5">{displayEmail}</p>
             </div>
           </div>
 
@@ -670,7 +670,7 @@ export default function CustomerAccountPage() {
             {userRole === "admin" && (
               <a
                 href="/admin"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2 text-xs font-bold text-white hover:bg-[#360509]"
               >
                 <Shield className="h-3.5 w-3.5" /> Admin Dashboard
               </a>
@@ -678,7 +678,7 @@ export default function CustomerAccountPage() {
             {userRole === "delivery_partner" && (
               <a
                 href="/delivery"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#F97316] px-4 py-2 text-xs font-bold text-white hover:bg-[#EA580C]"
               >
                 <Truck className="h-3.5 w-3.5" /> Delivery Portal
               </a>
@@ -711,12 +711,12 @@ export default function CustomerAccountPage() {
 
         {/* Personalized Recommendations Strip when customer has pets */}
         {!showOnboarding && recommendations.length > 0 && (
-          <section className="rounded-2xl border border-blue-100 bg-white p-5 sm:p-6 shadow-2xs space-y-5">
+          <section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-2xs space-y-5">
             {recommendations.slice(0, 2).map(({ pet, categories: matchedCats, products }) => (
               <div key={pet.id} className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#0066CC]">
+                    <div className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#F97316]">
                       <Sparkles className="h-3 w-3" /> Tailored Pet Care
                     </div>
                     <h2 className="text-lg font-black text-gray-900">
@@ -729,7 +729,7 @@ export default function CustomerAccountPage() {
                       <a
                         key={cat.id}
                         href={`/products?category=${cat.slug}`}
-                        className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-bold text-gray-700 hover:border-[#0066CC] hover:text-[#0066CC]"
+                        className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-bold text-gray-700 hover:border-[#F97316] hover:text-[#F97316]"
                       >
                         {cat.name} →
                       </a>
@@ -761,12 +761,12 @@ export default function CustomerAccountPage() {
                               </div>
                             )}
                           </a>
-                          <p className="text-[10px] font-bold uppercase text-[#0066CC]">
+                          <p className="text-[10px] font-bold uppercase text-[#F97316]">
                             {prod.category_name}
                           </p>
                           <a
                             href={`/products/${prod.slug || prod.id}`}
-                            className="text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#0066CC]"
+                            className="text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#F97316]"
                           >
                             {prod.name}
                           </a>
@@ -779,7 +779,7 @@ export default function CustomerAccountPage() {
                             type="button"
                             onClick={() => handleQuickAddToCart(prod)}
                             disabled={(prod.stock_quantity ?? 0) <= 0}
-                            className="rounded-lg bg-[#0066CC] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#0052A3] disabled:opacity-40"
+                            className="rounded-lg bg-[#4A0A0F] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#360509] disabled:opacity-40"
                           >
                             {(prod.stock_quantity ?? 0) > 0 ? "Add" : "Sold Out"}
                           </button>
@@ -805,7 +805,7 @@ export default function CustomerAccountPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
                   active
-                    ? "bg-[#0066CC] text-white shadow-sm"
+                    ? "bg-[#4A0A0F] text-white shadow-sm"
                     : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                 }`}
               >
@@ -843,7 +843,7 @@ export default function CustomerAccountPage() {
                 </p>
                 <a
                   href="/products"
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#0066CC] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0052A3]"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509]"
                 >
                   Browse Store
                 </a>
@@ -927,7 +927,7 @@ export default function CustomerAccountPage() {
                     </a>
                     <a
                       href={`/orders/${order.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#0066CC] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#0052A3]"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#360509]"
                     >
                       <Truck className="h-3.5 w-3.5" /> Track Order
                     </a>
@@ -963,7 +963,7 @@ export default function CustomerAccountPage() {
                 <button
                   type="button"
                   onClick={openAddPetModal}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0066CC] px-4 py-2 text-xs font-bold text-white hover:bg-[#0052A3]"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2 text-xs font-bold text-white hover:bg-[#360509]"
                 >
                   <Plus className="h-3.5 w-3.5" /> Add Pet
                 </button>
@@ -986,7 +986,7 @@ export default function CustomerAccountPage() {
                 <button
                   type="button"
                   onClick={openAddPetModal}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#0066CC] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0052A3]"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509]"
                 >
                   <Plus className="h-3.5 w-3.5" /> Add Your First Pet
                 </button>
@@ -1042,7 +1042,7 @@ export default function CustomerAccountPage() {
                               {pet.preferences.care_interests.map((tag) => (
                                 <span
                                   key={tag}
-                                  className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-[#0066CC]"
+                                  className="rounded-full bg-[#FFF7ED] px-2.5 py-0.5 text-[10px] font-bold text-[#F97316]"
                                 >
                                   {tag}
                                 </span>
@@ -1129,7 +1129,7 @@ export default function CustomerAccountPage() {
                   <button
                     type="submit"
                     disabled={savingHealth}
-                    className="rounded-lg bg-[#0066CC] px-3 py-2 text-xs font-bold text-white hover:bg-[#0052A3] disabled:opacity-50"
+                    className="rounded-lg bg-[#4A0A0F] px-3 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-50"
                   >
                     {savingHealth ? "Saving..." : "+ Add Record"}
                   </button>
@@ -1149,7 +1149,7 @@ export default function CustomerAccountPage() {
                     >
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold uppercase text-[#0066CC]">
+                          <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2 py-0.5 text-[10px] font-bold uppercase text-[#F97316]">
                             {rec.record_type.replace("_", " ")}
                           </span>
                           <span className="text-xs font-black text-gray-900">
@@ -1252,7 +1252,7 @@ export default function CustomerAccountPage() {
                     <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          item.running_low ? "bg-amber-500" : "bg-[#0066CC]"
+                          item.running_low ? "bg-amber-500" : "bg-[#F97316]"
                         }`}
                         style={{ width: `${Math.min(100, item.percent_consumed)}%` }}
                       />
@@ -1281,7 +1281,7 @@ export default function CustomerAccountPage() {
                             image_url: item.image_url,
                           })
                         }
-                        className="rounded-xl bg-[#0066CC] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#0052A3]"
+                        className="rounded-xl bg-[#4A0A0F] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#360509]"
                       >
                         1-Tap Reorder (₹{Number(item.price || 0).toFixed(0)})
                       </button>
@@ -1355,7 +1355,7 @@ export default function CustomerAccountPage() {
                           {sub.pet_name ? ` • For ${sub.pet_name}` : ""}
                         </p>
                         {sub.next_delivery_date && sub.status !== "cancelled" && (
-                          <p className="text-xs font-bold text-[#0066CC] mt-1">
+                          <p className="text-xs font-bold text-[#4A0A0F] mt-1">
                             Next Delivery: {new Date(sub.next_delivery_date).toLocaleDateString("en-IN", { dateStyle: "medium" })}
                           </p>
                         )}
@@ -1411,7 +1411,7 @@ export default function CustomerAccountPage() {
               <button
                 type="button"
                 onClick={() => setShowAddAddress(!showAddAddress)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#0066CC] px-4 py-2 text-xs font-bold text-white hover:bg-[#0052A3]"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2 text-xs font-bold text-white hover:bg-[#360509]"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Address
               </button>
@@ -1438,7 +1438,7 @@ export default function CustomerAccountPage() {
                         setNewAddress({ ...newAddress, name: e.target.value })
                       }
                       placeholder="e.g., Home - Vipul"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#0066CC]"
+                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
                     />
                   </div>
                   <div>
@@ -1453,7 +1453,7 @@ export default function CustomerAccountPage() {
                         setNewAddress({ ...newAddress, phone: e.target.value })
                       }
                       placeholder="10-digit mobile number"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#0066CC]"
+                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -1471,7 +1471,7 @@ export default function CustomerAccountPage() {
                         })
                       }
                       placeholder="House No, Street, Area"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#0066CC]"
+                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
                     />
                   </div>
                   <div>
@@ -1485,7 +1485,7 @@ export default function CustomerAccountPage() {
                       onChange={(e) =>
                         setNewAddress({ ...newAddress, city: e.target.value })
                       }
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#0066CC]"
+                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
                     />
                   </div>
                   <div>
@@ -1503,7 +1503,7 @@ export default function CustomerAccountPage() {
                         })
                       }
                       placeholder="e.g., 500001"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#0066CC]"
+                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
                     />
                   </div>
                 </div>
@@ -1531,7 +1531,7 @@ export default function CustomerAccountPage() {
                   <button
                     type="submit"
                     disabled={savingAddress}
-                    className="rounded-xl bg-[#0066CC] px-5 py-2 text-xs font-bold text-white hover:bg-[#0052A3] disabled:opacity-60"
+                    className="rounded-xl bg-[#4A0A0F] px-5 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
                   >
                     {savingAddress ? "Saving..." : "Save Address"}
                   </button>
@@ -1553,7 +1553,7 @@ export default function CustomerAccountPage() {
                   <div
                     key={addr.id}
                     className={`rounded-2xl border bg-white p-5 shadow-2xs flex flex-col justify-between ${
-                      addr.is_default ? "border-[#0066CC]" : "border-gray-200"
+                      addr.is_default ? "border-[#4A0A0F]" : "border-gray-200"
                     }`}
                   >
                     <div>
@@ -1562,7 +1562,7 @@ export default function CustomerAccountPage() {
                           {addr.name}
                         </span>
                         {addr.is_default && (
-                          <span className="rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] font-extrabold text-[#0066CC]">
+                          <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2.5 py-0.5 text-[10px] font-extrabold text-[#F97316]">
                             Default
                           </span>
                         )}
@@ -1611,7 +1611,7 @@ export default function CustomerAccountPage() {
               </h2>
               <a
                 href="/products"
-                className="text-xs font-bold text-[#0066CC] hover:underline"
+                className="text-xs font-bold text-[#4A0A0F] hover:text-[#F97316] hover:underline"
               >
                 Explore Products →
               </a>
@@ -1649,12 +1649,12 @@ export default function CustomerAccountPage() {
                           </div>
                         )}
                       </a>
-                      <p className="text-[10px] font-bold uppercase text-[#0066CC]">
+                      <p className="text-[10px] font-bold uppercase text-[#F97316]">
                         {item.category_name}
                       </p>
                       <a
                         href={`/products/${item.slug || item.product_id}`}
-                        className="mt-0.5 block text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#0066CC]"
+                        className="mt-0.5 block text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#F97316]"
                       >
                         {item.name}
                       </a>
@@ -1675,7 +1675,7 @@ export default function CustomerAccountPage() {
                             stock_quantity: item.stock_quantity,
                           })
                         }
-                        className="flex-1 rounded-xl bg-[#0066CC] py-2 text-xs font-bold text-white hover:bg-[#0052A3]"
+                        className="flex-1 rounded-xl bg-[#4A0A0F] py-2 text-xs font-bold text-white hover:bg-[#360509]"
                       >
                         Add to Cart
                       </button>
@@ -1716,7 +1716,7 @@ export default function CustomerAccountPage() {
               </div>
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
                 <p className="text-xs font-bold text-gray-500 uppercase">Points Redeemed</p>
-                <p className="text-3xl font-black text-[#0066CC] mt-1">
+                <p className="text-3xl font-black text-[#4A0A0F] mt-1">
                   {rewardsData?.redeemedPoints ?? 0}
                 </p>
               </div>
@@ -1777,10 +1777,10 @@ export default function CustomerAccountPage() {
                   {activeOffers.map((offer) => (
                     <div
                       key={offer.id}
-                      className="rounded-2xl border border-dashed border-[#2563EB]/40 bg-blue-50/40 p-4 flex items-center justify-between gap-3 text-xs"
+                      className="rounded-2xl border border-dashed border-[#FED7AA] bg-[#FFF7ED] p-4 flex items-center justify-between gap-3 text-xs"
                     >
                       <div>
-                        <span className="inline-block rounded-lg bg-[#2563EB] px-2.5 py-1 font-black text-white tracking-wider">
+                        <span className="inline-block rounded-lg bg-[#4A0A0F] px-2.5 py-1 font-black text-white tracking-wider">
                           {offer.code}
                         </span>
                         <p className="font-bold text-gray-900 mt-1.5">{offer.title}</p>
@@ -1802,7 +1802,7 @@ export default function CustomerAccountPage() {
                             setTimeout(() => setToast(null), 2500);
                           }
                         }}
-                        className="rounded-xl border border-[#2563EB] bg-white px-3 py-1.5 font-bold text-[#2563EB] hover:bg-blue-50 shrink-0"
+                        className="rounded-xl border border-[#4A0A0F] bg-white px-3 py-1.5 font-bold text-[#4A0A0F] hover:bg-[#FFF7ED] shrink-0"
                       >
                         Copy Code
                       </button>
@@ -1857,7 +1857,7 @@ export default function CustomerAccountPage() {
                         href={`/api/prescriptions/${rx.id}/file`}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-bold text-[#0066CC] hover:underline"
+                        className="font-bold text-[#4A0A0F] hover:text-[#F97316] hover:underline"
                       >
                         View File
                       </a>
@@ -1887,7 +1887,7 @@ export default function CustomerAccountPage() {
                   type="text"
                   value={profileName}
                   onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#0066CC]"
+                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#F97316]"
                 />
               </div>
               <div>
@@ -1912,7 +1912,7 @@ export default function CustomerAccountPage() {
               <button
                 type="submit"
                 disabled={savingProfile}
-                className="rounded-xl bg-[#0066CC] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0052A3] disabled:opacity-60"
+                className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
               >
                 {savingProfile ? "Saving..." : "Save Profile Name"}
               </button>
@@ -1950,7 +1950,7 @@ export default function CustomerAccountPage() {
                           key={p.id}
                           className="flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200/80 px-2.5 py-1 text-xs font-bold text-gray-800"
                         >
-                          <span>{p.type === "cat" ? <Cat size={13} className="text-[#D97706]" strokeWidth={1.75} /> : p.type === "bird" ? <Bird size={13} className="text-[#0284C7]" strokeWidth={1.75} /> : <Dog size={13} className="text-[#F97316]" strokeWidth={1.75} />}</span>
+                          <span>{p.type === "cat" ? <Cat size={13} className="text-[#D97706]" strokeWidth={1.75} /> : p.type === "bird" ? <Bird size={13} className="text-[#B45309]" strokeWidth={1.75} /> : <Dog size={13} className="text-[#F97316]" strokeWidth={1.75} />}</span>
                           <span>{p.name}</span>
                           <span className="text-[10px] font-normal text-gray-500">
                             ({p.breed || p.type})
@@ -1966,14 +1966,14 @@ export default function CustomerAccountPage() {
                 </div>
 
                 {/* Hyperlocal Vet Helpline */}
-                <div className="mt-3 flex items-center justify-between rounded-xl bg-blue-50/80 border border-blue-200/60 p-3 text-xs">
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-[#FFF7ED] border border-[#FED7AA] p-3 text-xs">
                   <div>
-                    <p className="font-bold text-blue-950">Sri Usha Vet &amp; Pet Helpline</p>
-                    <p className="text-[11px] text-blue-700 font-medium">Uppal, Hyderabad • 30-60m Dispatch</p>
+                    <p className="font-bold text-[#4A0A0F]">Sri Usha Vet &amp; Pet Helpline</p>
+                    <p className="text-[11px] text-stone-600 font-medium">Uppal, Hyderabad • Store Assistance</p>
                   </div>
                   <a
                     href="tel:+919440274418"
-                    className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700"
+                    className="rounded-lg bg-[#4A0A0F] px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-[#360509]"
                   >
                     Call Vet
                   </a>
@@ -2039,7 +2039,7 @@ export default function CustomerAccountPage() {
                     onChange={(e) =>
                       setPetForm({ ...petForm, name: e.target.value })
                     }
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div>
@@ -2070,7 +2070,7 @@ export default function CustomerAccountPage() {
                       setPetForm({ ...petForm, age: e.target.value })
                     }
                     placeholder="e.g., 2 years"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -2083,7 +2083,7 @@ export default function CustomerAccountPage() {
                     onChange={(e) =>
                       setPetForm({ ...petForm, breed: e.target.value })
                     }
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -2100,7 +2100,7 @@ export default function CustomerAccountPage() {
                       })
                     }
                     placeholder="e.g., Dry Kibble, Grain-Free"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -2117,7 +2117,7 @@ export default function CustomerAccountPage() {
                       })
                     }
                     placeholder="e.g., Nutrition, Grooming, Supplements"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#0066CC]"
+                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
                   />
                 </div>
                 <div className="sm:col-span-2 flex items-center gap-3">
@@ -2163,7 +2163,7 @@ export default function CustomerAccountPage() {
                 <button
                   type="submit"
                   disabled={savingPet}
-                  className="rounded-xl bg-[#0066CC] px-5 py-2 text-xs font-bold text-white hover:bg-[#0052A3] disabled:opacity-60"
+                  className="rounded-xl bg-[#4A0A0F] px-5 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
                 >
                   {savingPet ? "Saving..." : editingPet ? "Save Changes" : "Add Pet"}
                 </button>

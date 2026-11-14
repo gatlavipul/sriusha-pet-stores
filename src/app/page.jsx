@@ -45,9 +45,9 @@ const CATEGORY_STYLE_MAP = {
   },
   bird: {
     icon: Bird,
-    bg: "bg-sky-50",
-    text: "text-[#0284C7]",
-    border: "border-sky-200",
+    bg: "bg-[#FFFDF0]",
+    text: "text-[#B45309]",
+    border: "border-[#FDE68A]",
     label: "Birds & Aviary",
   },
   "pet-food": {
@@ -59,9 +59,9 @@ const CATEGORY_STYLE_MAP = {
   },
   grooming: {
     icon: Scissors,
-    bg: "bg-purple-50",
-    text: "text-[#7C3AED]",
-    border: "border-purple-200",
+    bg: "bg-[#FFF7ED]",
+    text: "text-[#EA580C]",
+    border: "border-[#FED7AA]",
     label: "Grooming & Hygiene",
   },
   healthcare: {
@@ -260,27 +260,11 @@ export default function HomePage() {
                   Explore Dog Care
                 </a>
               </div>
-
-              {/* Trust Indicators */}
-              <div className="mt-10 pt-6 border-t border-stone-200/80 grid grid-cols-3 gap-4 text-center lg:text-left">
-                <div>
-                  <div className="text-2xl font-black text-[#4A0A0F]">10,000+</div>
-                  <div className="text-xs text-stone-500 font-medium">Happy Pets Served</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-[#F97316]">30-60m</div>
-                  <div className="text-xs text-stone-500 font-medium">Local Quick Delivery</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-[#4A0A0F]">Hyderabad</div>
-                  <div className="text-xs text-stone-500 font-medium">Uppal Store Dispatch</div>
-                </div>
-              </div>
             </div>
 
             {/* Right Column: Hero Visual Card */}
             <div className="lg:col-span-5 flex justify-center">
-              <div className="relative w-full max-w-md">
+              <div className="w-full max-w-md">
                 <div className="overflow-hidden rounded-3xl border border-stone-200 bg-white p-3 shadow-xl">
                   <img
                     src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=800&q=80"
@@ -290,26 +274,20 @@ export default function HomePage() {
                     className="h-80 w-full object-cover rounded-2xl"
                   />
                   <div className="p-4 bg-white">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-[#F97316] uppercase tracking-wider">
-                          Verified Care
-                        </div>
-                        <div className="text-base font-bold text-[#4A0A0F]">
-                          Quality Pet Food &amp; Essentials
-                        </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#F97316] uppercase tracking-wider">
+                        Verified Care
                       </div>
-                      <div className="flex items-center gap-1 bg-[#FEFCE8] border border-[#FEF08A] rounded-full px-2.5 py-1 text-xs font-bold text-amber-800">
-                        <Star size={13} className="fill-[#FACC15] text-[#FACC15]" />
-                        <span>4.9 / 5</span>
+                      <div className="text-base font-bold text-[#4A0A0F]">
+                        Quality Pet Food &amp; Essentials
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Floating pill badge */}
-                <div className="absolute -bottom-4 -left-4 rounded-2xl bg-white border border-stone-200 p-3 shadow-lg flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#F97316]">
+                {/* Express delivery card - in-flow so it never covers text */}
+                <div className="mt-3 rounded-2xl bg-white border border-stone-200 p-3 shadow-sm flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#F97316]">
                     <Truck size={20} strokeWidth={1.75} />
                   </div>
                   <div>
@@ -385,9 +363,9 @@ export default function HomePage() {
             {[
               { slug: "dog", label: "Dog", icon: Dog, bg: "bg-[#FFF7ED]", text: "text-[#F97316]", border: "border-[#FED7AA]" },
               { slug: "cat", label: "Cat", icon: Cat, bg: "bg-[#FEFCE8]", text: "text-[#D97706]", border: "border-[#FEF08A]" },
-              { slug: "bird", label: "Birds", icon: Bird, bg: "bg-sky-50", text: "text-[#0284C7]", border: "border-sky-200" },
+              { slug: "bird", label: "Birds", icon: Bird, bg: "bg-[#FFFDF0]", text: "text-[#B45309]", border: "border-[#FDE68A]" },
               { slug: "pet-food", label: "Pet Food", icon: Bone, bg: "bg-[#FFF1F2]", text: "text-[#4A0A0F]", border: "border-rose-200" },
-              { slug: "grooming", label: "Grooming", icon: Scissors, bg: "bg-purple-50", text: "text-[#7C3AED]", border: "border-purple-200" },
+              { slug: "grooming", label: "Grooming", icon: Scissors, bg: "bg-[#FFF7ED]", text: "text-[#EA580C]", border: "border-[#FED7AA]" },
               { slug: "healthcare", label: "Vet Health", icon: Stethoscope, bg: "bg-emerald-50", text: "text-[#059669]", border: "border-emerald-200" },
             ].map((cat) => {
               const IconComp = cat.icon;
@@ -673,7 +651,6 @@ export default function HomePage() {
                   <ProductCard
                     key={product.id}
                     product={product}
-                    deliveryBadge="30-60m Delivery"
                   />
                 ))}
           </div>
@@ -688,13 +665,13 @@ export default function HomePage() {
               <div className="lg:col-span-8">
                 <div className="inline-flex items-center gap-2 rounded-full bg-white/10 text-amber-200 border border-white/20 px-3 py-1 text-xs font-bold mb-4">
                   <Stethoscope size={14} strokeWidth={1.75} />
-                  <span>Licensed Veterinary Guidance</span>
+                  <span>Store Guidance &amp; Advice</span>
                 </div>
                 <h3 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
                   Have Questions About Your Pet&apos;s Diet or Health?
                 </h3>
                 <p className="mt-3 text-sm sm:text-base text-stone-200 max-w-xl">
-                  Our in-store veterinary team helps you select suitable prescription diets, supplements, and wellness essentials for your pet.
+                  Our in-store team helps you select suitable prescription diets, supplements, and wellness essentials for your pet.
                 </p>
                 <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-semibold">
                   <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3.5 py-2">
@@ -713,7 +690,7 @@ export default function HomePage() {
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#F97316] px-6 py-4 text-sm font-bold text-white shadow-lg hover:bg-[#EA580C] transition-all"
                 >
                   <Phone size={18} strokeWidth={1.75} />
-                  <span>Call Store Vet</span>
+                  <span>Call Store</span>
                 </a>
               </div>
             </div>
@@ -721,83 +698,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 10. Customer Testimonials */}
-      <section className="py-14 sm:py-20 bg-[#FAF7F2] border-b border-stone-200/80">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <div className="text-xs font-bold uppercase tracking-wider text-[#F97316]">
-              Real Pet Parents in Hyderabad
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#4A0A0F] tracking-tight mt-1">
-              What Our Customers Say
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs">
-              <div className="flex items-center gap-1 text-[#FACC15] mb-3">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={15} className="fill-current" />
-                ))}
-              </div>
-              <p className="text-sm text-stone-700 leading-relaxed italic">
-                &ldquo;Sri Usha has been a lifesaver for my Golden Retriever. Genuine food delivered to my home in Uppal within an hour!&rdquo;
-              </p>
-              <div className="mt-4 flex items-center gap-3 border-t border-stone-100 pt-3">
-                <div className="h-9 w-9 rounded-full bg-[#FFF1F2] text-[#4A0A0F] flex items-center justify-center font-bold text-xs">
-                  KV
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[#4A0A0F]">Kavita Verma</div>
-                  <div className="text-[11px] text-stone-500">Uppal, Hyderabad</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs">
-              <div className="flex items-center gap-1 text-[#FACC15] mb-3">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={15} className="fill-current" />
-                ))}
-              </div>
-              <p className="text-sm text-stone-700 leading-relaxed italic">
-                &ldquo;The staff is very knowledgeable about puppy food and digestive supplements. Extremely polite and helpful team.&rdquo;
-              </p>
-              <div className="mt-4 flex items-center gap-3 border-t border-stone-100 pt-3">
-                <div className="h-9 w-9 rounded-full bg-[#FFF7ED] text-[#F97316] flex items-center justify-center font-bold text-xs">
-                  RS
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[#4A0A0F]">Rahul Sharma</div>
-                  <div className="text-[11px] text-stone-500">Habsiguda, Hyderabad</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs">
-              <div className="flex items-center gap-1 text-[#FACC15] mb-3">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={15} className="fill-current" />
-                ))}
-              </div>
-              <p className="text-sm text-stone-700 leading-relaxed italic">
-                &ldquo;Ordering online was completely seamless. Opted for Cash on Delivery and received fresh packs with long shelf life.&rdquo;
-              </p>
-              <div className="mt-4 flex items-center gap-3 border-t border-stone-100 pt-3">
-                <div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                  SR
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[#4A0A0F]">Sneha Reddy</div>
-                  <div className="text-[11px] text-stone-500">LB Nagar, Hyderabad</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 11. Footer with Client Logo-Full and Brand Styling */}
+      {/* 10. Footer with Client Logo-Full and Brand Styling */}
       <footer className="border-t border-stone-200 bg-[#241819] text-stone-300 py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
@@ -869,7 +770,7 @@ export default function HomePage() {
             <div>
               <h4 className="text-sm font-bold text-white mb-3">Payment &amp; Trust</h4>
               <p className="text-xs text-stone-400 mb-3">
-                Secure checkout with UPI, Cards, and Cash on Delivery at your doorstep.
+                Cash on Delivery at your doorstep. Online payments (UPI &amp; Cards) coming soon.
               </p>
               <div className="flex items-center gap-2 text-xs text-[#F97316] font-semibold">
                 <Sparkles size={14} strokeWidth={1.75} />
