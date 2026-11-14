@@ -61,13 +61,13 @@ export default function AdminOrdersPage() {
   }, [searchQuery, statusFilter, paymentFilter]);
 
   useEffect(() => {
-    if (!userLoading && user) {
+    if (adminStatus === "authorized") {
       const timer = setTimeout(() => {
         fetchOrders();
       }, searchQuery ? 300 : 0);
       return () => clearTimeout(timer);
     }
-  }, [searchQuery, statusFilter, paymentFilter, user, userLoading, fetchOrders]);
+  }, [searchQuery, statusFilter, paymentFilter, adminStatus, fetchOrders]);
 
   const openOrderModal = async (order) => {
     setSelectedOrder(order);

@@ -118,13 +118,13 @@ export default function AdminProductsPage() {
   };
 
   useEffect(() => {
-    if (!userLoading && user) {
+    if (adminStatus === "authorized") {
       const timer = setTimeout(() => {
         fetchProducts();
       }, searchQuery ? 300 : 0);
       return () => clearTimeout(timer);
     }
-  }, [searchQuery, categoryFilter, statusFilter, lowStockFilter, user, userLoading, fetchProducts]);
+  }, [searchQuery, categoryFilter, statusFilter, lowStockFilter, adminStatus, fetchProducts]);
 
   const fetchCategories = async () => {
     try {
