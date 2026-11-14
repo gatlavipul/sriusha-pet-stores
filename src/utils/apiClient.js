@@ -111,3 +111,4 @@ export function setupGlobalAuthFetch() {
 }
 
 export default authFetch;
+

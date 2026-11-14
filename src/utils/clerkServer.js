@@ -296,6 +296,26 @@ export async function syncUserWithDatabase(clerkProfile) {
   if (!clerkProfile) return null;
 
   const { clerkUserId, email, name, dbUserId } = clerkProfile;
+  const normalizedEmail = email ? email.toLowerCase().trim() : null;
+  const isRealEmail = normalizedEmail && !normalizedEmail.endsWith("@clerk.sriushastores.in");
+
+  // Check if verified email matches an invite or record in delivery_staff
+  let staffRecord = null;
+  if (isRealEmail) {
+    try {
+      const staffRows = await sql`
+        SELECT id, email, name, phone, role, status
+        FROM delivery_staff
+        WHERE LOWER(email) = ${normalizedEmail}
+        LIMIT 1
+      `;
+      if (staffRows.length > 0) {
+        staffRecord = staffRows[0];
+      }
+    } catch (err) {
+      logger.warn("clerk_check_staff_error", "Failed to check delivery_staff during Clerk sync", err);
+    }
+  }
 
   // 1. Direct DB user ID lookup (for test sessions)
   if (dbUserId) {
@@ -307,6 +327,33 @@ export async function syncUserWithDatabase(clerkProfile) {
     `;
     if (existing.length > 0) return existing[0];
   }
+
+  // Helper to reconcile delivery role and link delivery_staff
+  const reconcileDeliveryStaff = async (user) => {
+    if (!staffRecord || !user?.id) return user;
+    try {
+      if (staffRecord.status === "active" && user.role !== "admin") {
+        if (user.role !== "delivery") {
+          await sql`UPDATE auth_users SET role = 'delivery' WHERE id = ${user.id}`;
+          user.role = "delivery";
+        }
+      } else if (staffRecord.status === "disabled" && (user.role === "delivery" || user.role === "delivery_partner")) {
+        await sql`UPDATE auth_users SET role = 'customer' WHERE id = ${user.id}`;
+        user.role = "customer";
+      }
+
+      await sql`
+        UPDATE delivery_staff 
+        SET user_id = ${user.id}, 
+            clerk_user_id = COALESCE(${clerkUserId || null}, clerk_user_id),
+            updated_at = NOW()
+        WHERE id = ${staffRecord.id}
+      `;
+    } catch (e) {
+      logger.error("reconcile_delivery_staff_error", "Failed to reconcile delivery staff link", e);
+    }
+    return user;
+  };
 
   // 2. Lookup by clerk_user_id in Neon database
   if (clerkUserId) {
@@ -336,7 +383,7 @@ export async function syncUserWithDatabase(clerkProfile) {
           await sql`UPDATE auth_users SET clerk_user_id = ${clerkUserId} WHERE id = ${targetUser.id}`;
           targetUser.clerk_user_id = clerkUserId;
           logger.info("clerk_user_relinked", `Re-linked Clerk ID ${clerkUserId} to existing ${targetUser.role} user ${targetUser.email}`);
-          return targetUser;
+          return await reconcileDeliveryStaff(targetUser);
         } else {
           await sql`
             UPDATE auth_users
@@ -346,7 +393,7 @@ export async function syncUserWithDatabase(clerkProfile) {
           existingByClerk.email = email;
         }
       }
-      return existingByClerk;
+      return await reconcileDeliveryStaff(existingByClerk);
     }
   }
 
@@ -371,28 +418,38 @@ export async function syncUserWithDatabase(clerkProfile) {
         user.clerk_user_id = clerkUserId;
         logger.info("clerk_user_linked", `Linked Clerk ID ${clerkUserId} to existing ${user.role} user ${user.email}`);
       }
-      return user;
+      return await reconcileDeliveryStaff(user);
     }
   }
 
-  // 4. If user does NOT exist, create a new record strictly with role = 'customer'
-  // (Prevents privilege escalation - admins can never be created via public Clerk registration)
+  // 4. If user does NOT exist, create a new record.
+  // Default is 'customer', UNLESS an active delivery_staff invite exists for this verified email.
+  const initialRole = (staffRecord && staffRecord.status === "active") ? "delivery" : "customer";
   const cleanEmail = email || `${clerkUserId}@clerk.sriushastores.in`;
-  const cleanName = name || "Customer";
+  const cleanName = staffRecord?.name || name || "Customer";
+  const staffPhone = staffRecord?.phone || null;
 
   try {
     const inserted = await sql`
-      INSERT INTO auth_users (name, email, role, clerk_user_id, created_at)
-      VALUES (${cleanName}, ${cleanEmail}, 'customer', ${clerkUserId || null}, NOW())
+      INSERT INTO auth_users (name, email, role, phone, clerk_user_id, created_at)
+      VALUES (${cleanName}, ${cleanEmail}, ${initialRole}, ${staffPhone}, ${clerkUserId || null}, NOW())
       RETURNING id, name, email, role, clerk_user_id, image
     `;
 
     const newUser = inserted[0];
-    logger.info("clerk_user_provisioned", `Created new customer record in Neon for Clerk user ${cleanEmail}`, {
+    logger.info("clerk_user_provisioned", `Created new ${initialRole} record in Neon for Clerk user ${cleanEmail}`, {
       userId: newUser.id,
       clerkUserId,
       role: newUser.role,
     });
+
+    if (staffRecord) {
+      await sql`
+        UPDATE delivery_staff 
+        SET user_id = ${newUser.id}, clerk_user_id = ${clerkUserId || null}, updated_at = NOW()
+        WHERE id = ${staffRecord.id}
+      `;
+    }
 
     // Send welcome email via Resend
     triggerWelcomeNotification(newUser).catch((e) =>
@@ -409,7 +466,7 @@ export async function syncUserWithDatabase(clerkProfile) {
         WHERE LOWER(email) = LOWER(${cleanEmail}) OR clerk_user_id = ${clerkUserId}
         LIMIT 1
       `;
-      if (fallback.length > 0) return fallback[0];
+      if (fallback.length > 0) return await reconcileDeliveryStaff(fallback[0]);
     }
     logger.error("sync_user_db_error", "Failed to sync user with Neon database", err);
     return null;

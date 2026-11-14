@@ -51,7 +51,8 @@ export async function requireAdmin(req) {
 }
 
 /**
- * Validates that the current request is from an authenticated delivery partner.
+ * Validates that the current request is from an authenticated delivery partner or admin.
+ * Authoritatively verifies against delivery_staff and auth_users in the database.
  */
 export async function requireDeliveryPartner(req) {
   try {
@@ -68,11 +69,43 @@ export async function requireDeliveryPartner(req) {
       LIMIT 1
     `;
 
-    if (!rows || rows.length === 0 || rows[0].role !== "delivery_partner") {
-      return { error: "Access denied. Delivery partner privileges required.", status: 403 };
+    if (!rows || rows.length === 0) {
+      return { error: "User not found", status: 404 };
     }
 
-    return { user: rows[0], session };
+    const user = rows[0];
+
+    // Admin can also access delivery portal & APIs
+    if (user.role === "admin") {
+      return { user, session, isAdmin: true, isDelivery: true };
+    }
+
+    // Check delivery_staff table for authoritative status
+    try {
+      const staffRows = await sql`
+        SELECT id, email, role, status 
+        FROM delivery_staff 
+        WHERE LOWER(email) = LOWER(${user.email}) OR user_id = ${user.id} OR clerk_user_id = ${user.clerk_user_id}
+        LIMIT 1
+      `;
+
+      if (staffRows.length > 0) {
+        const staff = staffRows[0];
+        if (staff.status === "disabled") {
+          return { error: "Access removed, contact admin", status: 403, disabled: true };
+        }
+        return { user, session, staff, isDelivery: true, isAdmin: false };
+      }
+    } catch (err) {
+      console.warn("delivery_staff lookup warning:", err);
+    }
+
+    // Fallback if role is delivery or delivery_partner in auth_users
+    if (user.role === "delivery" || user.role === "delivery_partner") {
+      return { user, session, isDelivery: true, isAdmin: false };
+    }
+
+    return { error: "Access denied. Delivery partner role required.", status: 403 };
   } catch (err) {
     console.error("requireDeliveryPartner error:", err);
     return { error: "Authorization error", status: 500 };

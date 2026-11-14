@@ -149,6 +149,14 @@ export default function AdminDashboard() {
           : "bg-gray-50 text-gray-600 border-gray-100",
     },
     {
+      label: "Delivery Team",
+      value: "Fleet Portal",
+      sub: "Manage driver accounts & access",
+      href: "/admin/delivery-team",
+      icon: Truck,
+      accent: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    },
+    {
       label: "Unread Alerts",
       value: stats?.unreadNotifications ?? 0,
       sub: "Store & order notifications",

@@ -16,6 +16,7 @@ import {
   FileText,
   Star,
   Gift,
+  Truck,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import useAuth from "@/utils/useAuth";
@@ -80,6 +81,13 @@ export default function AdminHeader() {
               >
                 <ShoppingBag size={15} />
                 <span>Orders</span>
+              </a>
+              <a
+                href="/admin/delivery-team"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-gray-700 hover:bg-[#E8F8F0] hover:text-[#27AE60] transition-colors"
+              >
+                <Truck size={15} />
+                <span>Delivery Team</span>
               </a>
               <a
                 href="/admin/operations"
@@ -242,6 +250,13 @@ export default function AdminHeader() {
             >
               <ShoppingBag size={16} />
               <span>Orders Management</span>
+            </a>
+            <a
+              href="/admin/delivery-team"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-gray-800 hover:bg-[#E8F8F0]"
+            >
+              <Truck size={16} />
+              <span>Delivery Team</span>
             </a>
             <a
               href="/admin/products"

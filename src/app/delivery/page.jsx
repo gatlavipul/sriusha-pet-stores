@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import useUser from "@/utils/useUser";
+import useAuth from "@/utils/useAuth";
 import {
   Truck,
   Phone,
@@ -9,180 +10,229 @@ import {
   Clock,
   LogOut,
   Navigation,
-  IndianRupee,
+  RefreshCw,
   AlertTriangle,
-  RotateCcw,
-  XCircle,
-  BellOff,
-  X,
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  Check,
+  Store,
 } from "lucide-react";
-import useAuth from "@/utils/useAuth";
-
-const FAILURE_REASONS = [
-  "Customer unavailable / phone unreachable",
-  "Customer requested delivery reschedule",
-  "Incorrect or incomplete address",
-  "Customer refused package at doorstep",
-  "Payment issue / customer does not have cash",
-  "Weather / road closure obstruction",
-  "Other exception",
-];
 
 export default function DeliveryPartnerPage() {
   const { data: user, loading: userLoading } = useUser();
   const { signOut } = useAuth();
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [partner, setPartner] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
   const [authError, setAuthError] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [updatingId, setUpdatingId] = useState(null);
+  const [isAccessDisabled, setIsAccessDisabled] = useState(false);
+  const [driverInfo, setDriverInfo] = useState(null);
+  const [activeTab, setActiveTab] = useState("new"); // "new" | "picked_up" | "delivered"
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
-  // Failure modal state
-  const [failureModalOrder, setFailureModalOrder] = useState(null);
-  const [selectedReason, setSelectedReason] = useState(FAILURE_REASONS[0]);
-  const [customReason, setCustomReason] = useState("");
-  const [submittingFailure, setSubmittingFailure] = useState(false);
-  const [otpInputs, setOtpInputs] = useState({});
+  // Deliver Confirmation Modal
+  const [confirmDeliveredOrder, setConfirmDeliveredOrder] = useState(null);
+
+  // Authenticate & verify role
+  const checkAccessAndFetch = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const headers = {};
+      if (typeof window !== "undefined" && window.Clerk?.session) {
+        try {
+          const token = await window.Clerk.session.getToken();
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+        } catch {}
+      }
+
+      const accessRes = await fetch("/api/delivery/check-access", { headers });
+      const accessData = await accessRes.json();
+
+      if (!accessRes.ok || !accessData.allowed) {
+        if (accessData.disabled) {
+          setIsAccessDisabled(true);
+          setAuthError("Access removed, contact admin");
+          setAuthChecking(false);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+
+        // If not logged in, redirect to login
+        if (accessRes.status === 401) {
+          if (typeof window !== "undefined") {
+            window.location.href = "/account/signin?callbackUrl=/delivery";
+          }
+          return;
+        }
+
+        // If normal customer tries to access /delivery, redirect to Home
+        if (accessRes.status === 403) {
+          if (typeof window !== "undefined") {
+            window.location.replace("/");
+          }
+          return;
+        }
+
+        setAuthError(accessData.error || "Access denied. Delivery partner role required.");
+        setAuthChecking(false);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      setDriverInfo(accessData.user || null);
+      setAuthChecking(false);
+
+      // Fetch assigned orders
+      const ordersRes = await fetch("/api/delivery/orders", { headers });
+      const ordersData = await ordersRes.json();
+      if (ordersRes.ok) {
+        setOrders(ordersData.orders || []);
+      }
+    } catch (err) {
+      console.error("Delivery portal fetch error:", err);
+      setAuthError("Failed to connect to delivery services. Please retry.");
+    } finally {
+      setAuthChecking(false);
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!userLoading && !user) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/account/signin?callbackUrl=/delivery";
+    if (!userLoading) {
+      if (!user) {
+        if (typeof window !== "undefined") {
+          window.location.href = "/account/signin?callbackUrl=/delivery";
+        }
+      } else {
+        checkAccessAndFetch();
       }
-    } else if (!userLoading && user) {
-      fetchDeliveryOrders();
     }
-  }, [user, userLoading]);
+  }, [user, userLoading, checkAccessAndFetch]);
 
-  const fetchDeliveryOrders = async () => {
+  // Status transitions
+  const handleMarkPickedUp = async (order) => {
+    if (!confirm(`Mark Order #${order.order_number} as Picked Up? This will transition the order to Out for Delivery.`)) {
+      return;
+    }
+
+    setUpdatingOrderId(order.id);
     try {
-      setLoading(true);
-      const res = await fetch("/api/delivery/orders");
+      const headers = { "Content-Type": "application/json" };
+      if (typeof window !== "undefined" && window.Clerk?.session) {
+        const token = await window.Clerk.session.getToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`/api/delivery/orders/${order.id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ status: "out_for_delivery" }),
+      });
+
       const data = await res.json();
-
       if (!res.ok) {
-        setAuthError(data.error || "Access denied. Delivery partner role required.");
-        setLoading(false);
+        alert(data.error || "Failed to update order status");
         return;
       }
 
-      setOrders(data.orders || []);
-      setPartner(data.partner || null);
-    } catch (err) {
-      console.error("Error fetching delivery orders:", err);
-      setAuthError("Failed to connect to delivery services.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateStage = async (orderId, newStatus, otpValue) => {
-    if (newStatus === "delivered" && (!otpValue || String(otpValue).trim().length !== 4)) {
-      alert("Please enter the customer's 4-digit Delivery OTP before confirming delivery.");
-      return;
-    }
-    const actionLabel = newStatus === "out_for_delivery" ? "start delivery for" : "mark as delivered";
-    if (!confirm(`Are you sure you want to ${actionLabel} this order?`)) return;
-
-    setUpdatingId(orderId);
-    try {
-      const payload = { status: newStatus };
-      if (newStatus === "delivered" && otpValue) {
-        payload.delivery_otp = String(otpValue).trim();
-      }
-      const res = await fetch(`/api/delivery/orders/${orderId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || "Failed to update order status");
-        return;
-      }
-
-      // Refresh list after successful status update
-      await fetchDeliveryOrders();
+      // Switch to Picked Up tab and refresh
+      setActiveTab("picked_up");
+      await checkAccessAndFetch(true);
     } catch (err) {
       console.error(err);
-      alert("Network error updating order status");
+      alert("Network error updating order to Picked Up");
     } finally {
-      setUpdatingId(null);
+      setUpdatingOrderId(null);
     }
   };
 
-  const handleReportFailure = async (e) => {
-    e.preventDefault();
-    if (!failureModalOrder) return;
+  const handleConfirmDeliverOrder = async () => {
+    if (!confirmDeliveredOrder) return;
+    const order = confirmDeliveredOrder;
 
-    const reason = selectedReason === "Other exception" && customReason.trim()
-      ? customReason.trim()
-      : selectedReason;
-
-    if (!reason || reason.trim().length < 3) {
-      alert("Please provide a valid failure reason.");
-      return;
-    }
-
-    setSubmittingFailure(true);
+    setUpdatingOrderId(order.id);
     try {
-      const res = await fetch(`/api/delivery/orders/${failureModalOrder.id}`, {
+      const headers = { "Content-Type": "application/json" };
+      if (typeof window !== "undefined" && window.Clerk?.session) {
+        const token = await window.Clerk.session.getToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`/api/delivery/orders/${order.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "delivery_failed",
-          failure_reason: reason,
-        }),
+        headers,
+        body: JSON.stringify({ status: "delivered" }),
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || "Failed to report delivery failure");
+        alert(data.error || "Failed to mark order as delivered");
         return;
       }
 
-      setFailureModalOrder(null);
-      setSelectedReason(FAILURE_REASONS[0]);
-      setCustomReason("");
-      await fetchDeliveryOrders();
+      setConfirmDeliveredOrder(null);
+      setActiveTab("delivered");
+      await checkAccessAndFetch(true);
     } catch (err) {
       console.error(err);
-      alert("Network error submitting delivery issue");
+      alert("Network error marking order as delivered");
     } finally {
-      setSubmittingFailure(false);
+      setUpdatingOrderId(null);
     }
   };
 
-  if (userLoading || loading) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FA] p-4">
-        <div className="h-9 w-9 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent mb-3" />
-        <p className="text-xs font-semibold text-gray-500">Connecting to Delivery Dispatch...</p>
-      </div>
-    );
-  }
+  // --- Filter orders by tab ---
+  const newOrders = orders.filter((o) =>
+    ["assigned", "ready_for_delivery", "packed", "confirmed", "placed"].includes(o.status)
+  );
+  const pickedUpOrders = orders.filter((o) => o.status === "out_for_delivery");
+  const deliveredOrders = orders.filter((o) => o.status === "delivered");
 
-  if (authError) {
+  const displayedOrders =
+    activeTab === "new"
+      ? newOrders
+      : activeTab === "picked_up"
+      ? pickedUpOrders
+      : deliveredOrders;
+
+  // --- Disabled State Screen ---
+  if (isAccessDisabled) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FA] p-4">
-        <div className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-8 text-center shadow-xs">
-          <AlertTriangle size={40} className="mx-auto text-amber-500 mb-3" />
-          <h1 className="text-lg font-extrabold text-gray-900">Access Restricted</h1>
-          <p className="text-xs text-gray-600 mt-2 mb-6">{authError}</p>
-          <div className="flex flex-col gap-2">
-            <a
-              href="/account/signin?callbackUrl=/delivery"
-              className="rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700"
+      <div className="min-h-screen bg-[#FAF7F2] text-[#241819] flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-3xl border border-rose-200 bg-white p-6 sm:p-8 text-center shadow-lg">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-100">
+            <AlertTriangle size={36} />
+          </div>
+
+          <h1 className="text-xl sm:text-2xl font-black text-[#4A0A0F]">
+            Access removed, contact admin
+          </h1>
+
+          <p className="mt-3 text-xs sm:text-sm text-stone-600 leading-relaxed">
+            Your delivery fleet account has been disabled or removed by the store administrator. You no longer have permission to access the delivery portal.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/account/signin" })}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#4A0A0F] py-3 text-xs font-bold text-white shadow-xs hover:bg-[#360509] min-h-[44px]"
             >
-              Sign In with Delivery Account
-            </a>
+              <LogOut size={16} />
+              <span>Sign Out</span>
+            </button>
             <a
               href="/"
-              className="rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+              className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-stone-200 py-3 text-xs font-bold text-stone-700 hover:bg-stone-50 min-h-[44px]"
             >
-              Return to Store Home
+              <Store size={15} />
+              <span>Return to Storefront</span>
             </a>
           </div>
         </div>
@@ -190,36 +240,61 @@ export default function DeliveryPartnerPage() {
     );
   }
 
-  const assignedCount = orders.filter((o) => o.status === "assigned" || o.status === "ready_for_delivery" || o.status === "packed").length;
-  const activeCount = orders.filter((o) => o.status === "out_for_delivery").length;
-  const deliveredCount = orders.filter((o) => o.status === "delivered").length;
-  const failedCount = orders.filter((o) => o.status === "delivery_failed").length;
+  // --- Auth Checking or Loading ---
+  if (userLoading || authChecking) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center p-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#F97316] border-t-transparent mb-3" />
+        <p className="text-xs font-bold text-stone-600">Connecting to Delivery Dispatch...</p>
+      </div>
+    );
+  }
 
-  const filteredOrders = orders.filter((o) => {
-    if (statusFilter === "active") return o.status === "out_for_delivery" || o.status === "assigned" || o.status === "ready_for_delivery" || o.status === "packed";
-    if (statusFilter === "delivered") return o.status === "delivered";
-    if (statusFilter === "failed") return o.status === "delivery_failed";
-    return true;
-  });
+  // --- Auth Error Screen ---
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-3xl border border-stone-200 bg-white p-6 sm:p-8 text-center shadow-lg">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
+          <h2 className="text-lg font-black text-[#4A0A0F]">Access Restricted</h2>
+          <p className="mt-2 text-xs text-stone-600 mb-6">{authError}</p>
+          <div className="flex flex-col gap-2.5">
+            <a
+              href="/account/signin?callbackUrl=/delivery"
+              className="rounded-xl bg-[#4A0A0F] py-3 text-xs font-bold text-white shadow-xs hover:bg-[#360509] min-h-[44px] flex items-center justify-center"
+            >
+              Sign In with Delivery Account
+            </a>
+            <a
+              href="/"
+              className="rounded-xl border border-stone-200 py-3 text-xs font-bold text-stone-700 hover:bg-stone-50 min-h-[44px] flex items-center justify-center"
+            >
+              Return to Storefront
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] pb-16">
-      {/* Driver Top Bar */}
-      <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur-md shadow-2xs sm:px-6">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-xs">
-              <Truck size={20} />
+    <div className="min-h-screen bg-[#FAF7F2] text-[#241819] flex flex-col pb-12">
+      {/* Dedicated Delivery Mobile Header */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#EADBCC] shadow-xs px-4 py-3">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-[#4A0A0F] text-white flex items-center justify-center shrink-0">
+              <Truck size={18} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-extrabold text-gray-900">Sri Usha Logistics</span>
-                <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700 border border-indigo-200">
-                  Driver Portal
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-black text-[#4A0A0F]">Sri Usha Delivery</span>
+                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.2 text-[9px] font-black text-emerald-800 border border-emerald-200 uppercase">
+                  Active
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 font-medium">
-                {partner?.name || user?.name} ({partner?.email || user?.email})
+              <p className="text-[11px] font-semibold text-stone-500 truncate max-w-[180px] sm:max-w-xs">
+                {driverInfo?.name || driverInfo?.email || user?.name || "Driver"}
               </p>
             </div>
           </div>
@@ -227,340 +302,313 @@ export default function DeliveryPartnerPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={fetchDeliveryOrders}
-              className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+              onClick={() => checkAccessAndFetch(true)}
+              disabled={refreshing}
+              className="h-10 w-10 flex items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 transition-colors shadow-2xs"
               title="Refresh assigned orders"
+              aria-label="Refresh assigned orders"
             >
-              <RotateCcw size={13} />
-              <span className="hidden sm:inline">Refresh</span>
+              <RefreshCw size={16} className={refreshing ? "animate-spin text-[#F97316]" : ""} />
             </button>
+
             <button
               type="button"
               onClick={() => signOut({ callbackUrl: "/account/signin" })}
-              className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
+              className="h-10 px-3 flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white text-rose-600 hover:bg-rose-50 text-xs font-bold transition-colors shadow-2xs"
+              title="Sign Out"
+              aria-label="Sign Out"
             >
-              <LogOut size={13} />
+              <LogOut size={15} />
               <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 pt-6 sm:px-6">
-        {/* KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 text-center shadow-2xs">
-            <div className="text-xl font-extrabold text-amber-900">{assignedCount}</div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 mt-0.5">
-              Assigned
-            </div>
-          </div>
-          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3.5 text-center shadow-2xs">
-            <div className="text-xl font-extrabold text-indigo-900">{activeCount}</div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 mt-0.5">
-              Out for Delivery
-            </div>
-          </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-center shadow-2xs">
-            <div className="text-xl font-extrabold text-emerald-900">{deliveredCount}</div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mt-0.5">
-              Delivered
-            </div>
-          </div>
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3.5 text-center shadow-2xs">
-            <div className="text-xl font-extrabold text-rose-900">{failedCount}</div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-rose-700 mt-0.5">
-              Exceptions
-            </div>
-          </div>
+      {/* Main Container */}
+      <main className="max-w-2xl mx-auto w-full px-3 sm:px-4 pt-4 flex-1">
+        {/* Navigation Tabs (Mobile-First 3-Segment) */}
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-stone-200/70 p-1 mb-5">
+          <button
+            type="button"
+            onClick={() => setActiveTab("new")}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition-all min-h-[44px] ${
+              activeTab === "new"
+                ? "bg-[#4A0A0F] text-white shadow-xs"
+                : "text-stone-700 hover:text-stone-900"
+            }`}
+          >
+            <span>New</span>
+            {newOrders.length > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  activeTab === "new"
+                    ? "bg-[#F97316] text-white"
+                    : "bg-stone-300 text-stone-800"
+                }`}
+              >
+                {newOrders.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("picked_up")}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition-all min-h-[44px] ${
+              activeTab === "picked_up"
+                ? "bg-[#4A0A0F] text-white shadow-xs"
+                : "text-stone-700 hover:text-stone-900"
+            }`}
+          >
+            <span>Picked Up</span>
+            {pickedUpOrders.length > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  activeTab === "picked_up"
+                    ? "bg-[#F97316] text-white"
+                    : "bg-stone-300 text-stone-800"
+                }`}
+              >
+                {pickedUpOrders.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("delivered")}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition-all min-h-[44px] ${
+              activeTab === "delivered"
+                ? "bg-[#4A0A0F] text-white shadow-xs"
+                : "text-stone-700 hover:text-stone-900"
+            }`}
+          >
+            <span>Delivered</span>
+            {deliveredOrders.length > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-black ${
+                  activeTab === "delivered"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-stone-300 text-stone-800"
+                }`}
+              >
+                {deliveredOrders.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap gap-2 mb-4 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`rounded-xl px-3.5 py-1.5 transition-all ${
-              statusFilter === "all"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            All Orders ({orders.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("active")}
-            className={`rounded-xl px-3.5 py-1.5 transition-all ${
-              statusFilter === "active"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            To Deliver ({assignedCount + activeCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("delivered")}
-            className={`rounded-xl px-3.5 py-1.5 transition-all ${
-              statusFilter === "delivered"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            Delivered ({deliveredCount})
-          </button>
-          {failedCount > 0 && (
+        {/* Orders Feed */}
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="rounded-2xl border border-[#EADBCC] bg-white p-4 shadow-xs animate-pulse">
+                <div className="h-4 bg-stone-200 rounded-md w-1/3 mb-3" />
+                <div className="h-6 bg-stone-200 rounded-md w-1/2 mb-3" />
+                <div className="h-12 bg-stone-100 rounded-xl mb-3" />
+                <div className="h-10 bg-stone-200 rounded-xl" />
+              </div>
+            ))}
+          </div>
+        ) : displayedOrders.length === 0 ? (
+          <div className="rounded-3xl border border-[#EADBCC] bg-white p-8 text-center shadow-xs">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FAF7F2] text-stone-400">
+              <Package size={28} />
+            </div>
+            <h3 className="text-base font-black text-[#4A0A0F]">
+              {activeTab === "new" && "No New Orders Assigned"}
+              {activeTab === "picked_up" && "No Orders in Transit"}
+              {activeTab === "delivered" && "No Deliveries Completed Yet"}
+            </h3>
+            <p className="mt-1 text-xs text-stone-500 max-w-xs mx-auto">
+              {activeTab === "new" && "When store administrators assign doorstep orders to your account, they will automatically appear here."}
+              {activeTab === "picked_up" && "Go to the New tab to mark an assigned order as Picked Up and begin navigation."}
+              {activeTab === "delivered" && "Completed doorstep deliveries will be cataloged here with confirmed timestamps."}
+            </p>
             <button
               type="button"
-              onClick={() => setStatusFilter("failed")}
-              className={`rounded-xl px-3.5 py-1.5 transition-all ${
-                statusFilter === "failed"
-                  ? "bg-rose-600 text-white shadow-xs"
-                  : "bg-white border border-rose-200 text-rose-700 hover:bg-rose-50"
-              }`}
+              onClick={() => checkAccessAndFetch(true)}
+              disabled={refreshing}
+              className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-stone-100 min-h-[44px]"
             >
-              Failed / Issues ({failedCount})
+              <RefreshCw size={13} className={refreshing ? "animate-spin text-[#F97316]" : ""} />
+              <span>Tap to Refresh Orders</span>
             </button>
-          )}
-        </div>
-
-        {/* Orders Listing */}
-        {filteredOrders.length === 0 ? (
-          <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-xs">
-            <Package size={40} className="mx-auto text-gray-300 mb-3" />
-            <h2 className="text-sm font-bold text-gray-900">No delivery orders in this view</h2>
-            <p className="text-xs text-gray-400 mt-1">
-              New customer orders assigned to you by administrators will appear here in real time.
-            </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredOrders.map((order) => {
-              const isCOD = order.payment_method === "cod";
-              const isPaid = order.payment_status === "paid";
-              const isDelivered = order.status === "delivered";
-              const isOut = order.status === "out_for_delivery";
-              const isFailed = order.status === "delivery_failed";
-              const isAssigned = !isOut && !isDelivered && !isFailed;
+            {displayedOrders.map((order) => {
+              const isCOD = order.payment_method === "cod" || order.payment_status !== "paid";
+              const isUpdating = updatingOrderId === order.id;
+
+              // Build address string for Google Maps
+              const fullAddress = [
+                order.shipping_address,
+                order.shipping_city,
+                order.shipping_pincode ? `Pincode: ${order.shipping_pincode}` : "",
+              ].filter(Boolean).join(", ");
 
               const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                `${order.shipping_address}, ${order.shipping_city} ${order.shipping_pincode}`
+                `${order.shipping_address || ""}, ${order.shipping_city || "Hyderabad"}, ${order.shipping_pincode || ""}`
               )}`;
 
               return (
                 <div
                   key={order.id}
-                  className={`rounded-3xl border p-5 shadow-xs transition-all bg-white ${
-                    isOut
-                      ? "border-indigo-300 ring-2 ring-indigo-500/10"
-                      : isFailed
-                      ? "border-rose-200 bg-rose-50/20"
-                      : isDelivered
-                      ? "border-gray-200 opacity-80"
-                      : "border-gray-200"
-                  }`}
+                  className="rounded-3xl border border-[#EADBCC] bg-white p-4 sm:p-5 shadow-xs transition-shadow hover:shadow-md"
                 >
-                  {/* Top Bar: Order ID + Status */}
-                  <div className="flex items-start justify-between border-b border-gray-100 pb-3">
+                  {/* Top Bar: Order Number & Payment Status */}
+                  <div className="flex items-start justify-between gap-2 pb-3 border-b border-stone-100">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-extrabold text-gray-900">
-                          {order.order_number || `Order #${order.id}`}
+                        <span className="text-base font-black text-[#4A0A0F]">
+                          {order.order_number}
                         </span>
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                            isDelivered
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                              : isFailed
-                              ? "bg-rose-50 text-rose-800 border-rose-200"
-                              : isOut
-                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                              : "bg-amber-50 text-amber-800 border-amber-200"
-                          }`}
-                        >
-                          {order.status === "delivery_failed" ? "Delivery Attempt Failed" : order.status}
+                        <span className="text-[10px] font-semibold text-stone-400">
+                          #{order.id}
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        Assigned on {new Date(order.created_at).toLocaleTimeString("en-IN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          day: "numeric",
-                          month: "short",
-                        })}
+                      <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
+                        <Clock size={11} />
+                        <span>
+                          {order.created_at
+                            ? new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "Today"}
+                        </span>
+                        {order.delivery_distance && (
+                          <span className="ml-1 text-stone-400">• {order.delivery_distance} km away</span>
+                        )}
                       </p>
                     </div>
 
-                    {/* Payment Badge */}
-                    <div className="text-right">
-                      {isCOD && !isPaid ? (
-                        <div className="rounded-xl border border-red-200 bg-red-50 px-2.5 py-1 text-right">
-                          <div className="text-[9px] font-bold uppercase text-red-600">Collect Cash</div>
-                          <div className="text-xs font-black text-red-800">
-                            ₹{parseFloat(order.total_amount).toFixed(0)}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-right">
-                          <div className="text-[9px] font-bold uppercase text-emerald-600">Prepaid</div>
-                          <div className="text-xs font-black text-emerald-800">
-                            ₹{parseFloat(order.total_amount).toFixed(0)}
-                          </div>
-                        </div>
-                      )}
+                    {/* Payment Mode Badge (Prominent for Driver) */}
+                    {isCOD ? (
+                      <div className="rounded-xl bg-amber-500/10 border border-amber-300 px-3 py-1.5 text-right">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                          Collect COD
+                        </p>
+                        <p className="text-sm font-black text-amber-950">
+                          ₹{Number(order.total_amount).toFixed(0)}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-right">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                          Prepaid Online
+                        </p>
+                        <p className="text-xs font-black text-emerald-900">
+                          Do Not Collect Cash
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Customer Information */}
+                  <div className="py-3 space-y-2 text-xs">
+                    <div className="flex items-start gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-[#4A0A0F]/5 text-[#4A0A0F] flex items-center justify-center shrink-0 mt-0.5">
+                        <MapPin size={15} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-stone-900 text-xs sm:text-sm">
+                          {order.customer_name}
+                        </p>
+                        <p className="text-stone-600 mt-0.5 leading-relaxed text-xs">
+                          {order.shipping_address || "Address snapshot unavailable"}
+                        </p>
+                        <p className="text-stone-500 font-semibold text-[11px] mt-0.5">
+                          {order.shipping_city} {order.shipping_pincode ? `• ${order.shipping_pincode}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Items Summary */}
+                    <div className="flex items-start gap-2 pt-2 border-t border-stone-100">
+                      <div className="h-7 w-7 rounded-lg bg-[#F97316]/10 text-[#F97316] flex items-center justify-center shrink-0 mt-0.5">
+                        <Package size={15} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+                          Package Contents
+                        </p>
+                        <p className="text-stone-800 font-semibold text-xs mt-0.5 leading-normal">
+                          {order.itemsSummary}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Delivery Failure Alert Box */}
-                  {isFailed && (
-                    <div className="my-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
-                      <div className="font-bold flex items-center gap-1.5">
-                        <AlertTriangle size={14} className="text-rose-600" />
-                        <span>Delivery Issue Reported</span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-rose-700">
-                        Reason: <strong className="font-semibold">{order.delivery_failure_reason || "Customer unavailable"}</strong>
-                      </p>
-                      <p className="text-[10px] text-rose-500 mt-0.5">
-                        Awaiting store administrator review. Do not return stock to shelf.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Customer Contact & Navigation */}
-                  <div className="my-4 space-y-2.5 text-xs">
-                    <div className="flex items-start gap-2.5 text-gray-800">
-                      <MapPin size={16} className="text-gray-400 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold text-gray-900">{order.customer_name}</div>
-                        <div className="text-gray-600 mt-0.5 leading-relaxed">
-                          {order.shipping_address}, {order.shipping_city} - {order.shipping_pincode}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 pt-1">
-                      {order.gentle_delivery && (
-                        <div className="w-full flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold text-amber-900">
-                          <BellOff size={14} className="text-[#F97316] shrink-0" strokeWidth={1.75} />
-                          <span>GENTLE DELIVERY: Don&apos;t ring the bell — call customer on arrival</span>
-                        </div>
-                      )}
-                      {order.delivery_instructions && (
-                        <div className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold text-gray-700">
-                          Note: {order.delivery_instructions}
-                        </div>
-                      )}
-                      {order.customer_phone && (
-                        <a
-                          href={`tel:${order.customer_phone}`}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-800 hover:border-[#2563EB] hover:text-[#2563EB] shadow-2xs"
-                        >
-                          <Phone size={13} className="text-[#2563EB]" />
-                          <span>Call Customer: {order.customer_phone}</span>
-                        </a>
-                      )}
-                      <a
-                        href={mapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-800 hover:border-emerald-600 hover:text-emerald-700 shadow-2xs"
-                      >
-                        <Navigation size={13} className="text-emerald-600" />
-                        <span>Open in Maps</span>
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Items Preview */}
-                  {order.items && order.items.length > 0 && (
-                    <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3 mb-4 text-xs">
-                      <div className="font-bold text-gray-700 mb-1.5">Package Contents ({order.items.length} items):</div>
-                      <div className="space-y-1 text-gray-600 text-[11px]">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between">
-                            <span>
-                              {item.quantity} × {item.product_name}
-                            </span>
-                            <span className="font-semibold text-gray-800">
-                              ₹{(item.quantity * parseFloat(item.price)).toFixed(0)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Stage Action Button */}
-                  <div className="pt-2">
-                    {isAssigned && (
+                  {/* Action Buttons: Strictly >= 44px for ergonomics */}
+                  <div className="pt-3 border-t border-stone-100">
+                    {activeTab === "new" && (
                       <button
                         type="button"
-                        disabled={updatingId === order.id}
-                        onClick={() => updateStage(order.id, "out_for_delivery")}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-all disabled:opacity-50"
+                        disabled={isUpdating}
+                        onClick={() => handleMarkPickedUp(order)}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#4A0A0F] py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#360509] transition-all min-h-[44px] active:scale-[0.99] disabled:opacity-50"
                       >
-                        <Truck size={15} />
-                        <span>Start Delivery (Out for Delivery)</span>
+                        {isUpdating ? (
+                          <>
+                            <RefreshCw size={16} className="animate-spin" />
+                            <span>Updating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Truck size={17} />
+                            <span>Mark Picked Up &amp; Start Delivery</span>
+                          </>
+                        )}
                       </button>
                     )}
 
-                    {isOut && (
+                    {activeTab === "picked_up" && (
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/70 p-2">
-                          <label className="text-[11px] font-bold text-blue-900 whitespace-nowrap">
-                            Customer OTP:
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={4}
-                            value={otpInputs[order.id] || ""}
-                            onChange={(e) =>
-                              setOtpInputs((prev) => ({
-                                ...prev,
-                                [order.id]: e.target.value.replace(/\D/g, "").slice(0, 4),
-                              }))
-                            }
-                            placeholder="4-digit OTP"
-                            className="w-28 rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-center text-xs font-extrabold tracking-widest text-gray-900 outline-none focus:border-[#2563EB]"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          disabled={updatingId === order.id}
-                          onClick={() => updateStage(order.id, "delivered", otpInputs[order.id])}
-                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-all disabled:opacity-50"
-                        >
-                          <CheckCircle size={16} />
-                          <span>
-                            {isCOD && !isPaid
-                              ? `Confirm Cash Received (₹${parseFloat(order.total_amount).toFixed(0)}) & Mark Delivered`
-                              : "Confirm Package Delivered"}
-                          </span>
-                        </button>
+                        {/* Quick Contact & Navigation Controls */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <a
+                            href={order.customer_phone ? `tel:${order.customer_phone}` : "#"}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-3 text-xs font-bold text-emerald-800 shadow-2xs hover:bg-emerald-100 transition-colors min-h-[44px] text-center"
+                          >
+                            <Phone size={15} className="text-emerald-700" />
+                            <span>Call Customer</span>
+                          </a>
 
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-blue-300 bg-blue-50 px-3 py-3 text-xs font-bold text-blue-800 shadow-2xs hover:bg-blue-100 transition-colors min-h-[44px] text-center"
+                          >
+                            <Navigation size={15} className="text-blue-700" />
+                            <span>Google Maps</span>
+                          </a>
+                        </div>
+
+                        {/* Mark Delivered Trigger */}
                         <button
                           type="button"
-                          disabled={updatingId === order.id}
-                          onClick={() => {
-                            setFailureModalOrder(order);
-                            setSelectedReason(FAILURE_REASONS[0]);
-                            setCustomReason("");
-                          }}
-                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-all"
+                          disabled={isUpdating}
+                          onClick={() => setConfirmDeliveredOrder(order)}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-emerald-700 transition-all min-h-[44px] active:scale-[0.99]"
                         >
-                          <AlertTriangle size={14} />
-                          <span>Report Delivery Issue / Unable to Deliver</span>
+                          <CheckCircle size={17} />
+                          <span>Mark Delivered {isCOD ? `(Collect ₹${Number(order.total_amount).toFixed(0)})` : ""}</span>
                         </button>
                       </div>
                     )}
 
-                    {isDelivered && (
-                      <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 py-2 rounded-xl border border-emerald-200">
-                        <CheckCircle size={15} />
-                        <span>Delivery Completed &amp; Verified</span>
+                    {activeTab === "delivered" && (
+                      <div className="flex items-center justify-between text-xs text-stone-600 bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200">
+                        <span className="flex items-center gap-1.5 font-bold text-emerald-800">
+                          <Check size={15} className="text-emerald-600" />
+                          <span>Delivery Completed</span>
+                        </span>
+                        <span className="text-[11px] font-semibold text-emerald-700">
+                          {order.delivered_at
+                            ? new Date(order.delivered_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "Confirmed"}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -571,84 +619,59 @@ export default function DeliveryPartnerPage() {
         )}
       </main>
 
-      {/* Report Delivery Issue Modal */}
-      {failureModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl border border-gray-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2 text-rose-600">
-                <AlertTriangle size={20} />
-                <h3 className="font-extrabold text-sm text-gray-900">Report Delivery Issue</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFailureModalOrder(null)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-                aria-label="Close modal"
-              >
-                <X size={16} strokeWidth={1.75} />
-              </button>
+      {/* Mark Delivered Confirmation Modal */}
+      {confirmDeliveredOrder && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in slide-in-from-bottom-4 sm:zoom-in-95">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <CheckCircle size={28} />
             </div>
 
-            <form onSubmit={handleReportFailure} className="mt-4 space-y-4">
-              <p className="text-xs text-gray-600">
-                Please state why <span className="font-bold text-gray-900">{failureModalOrder.order_number}</span> could not be delivered to <span className="font-bold text-gray-900">{failureModalOrder.customer_name}</span>. The store admin will be alerted.
-              </p>
+            <h3 className="text-center text-lg font-black text-stone-900">
+              Confirm Order Delivery
+            </h3>
+            <p className="mt-1 text-center text-xs text-stone-500">
+              Order {confirmDeliveredOrder.order_number}
+            </p>
 
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                  Reason for Exception
-                </label>
-                <select
-                  value={selectedReason}
-                  onChange={(e) => setSelectedReason(e.target.value)}
-                  className="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-gray-800 focus:border-rose-500 focus:outline-none"
-                >
-                  {FAILURE_REASONS.map((reason) => (
-                    <option key={reason} value={reason}>
-                      {reason}
-                    </option>
-                  ))}
-                </select>
+            {/* COD Reminder */}
+            {confirmDeliveredOrder.payment_method === "cod" || confirmDeliveredOrder.payment_status !== "paid" ? (
+              <div className="my-4 rounded-2xl bg-amber-500/10 border border-amber-300 p-4 text-center">
+                <p className="text-xs font-bold text-amber-900 uppercase">
+                  Please Confirm Cash Collection:
+                </p>
+                <p className="text-2xl font-black text-amber-950 mt-1">
+                  ₹{Number(confirmDeliveredOrder.total_amount).toFixed(0)}
+                </p>
+                <p className="text-[11px] text-amber-800 mt-1 font-semibold">
+                  Hand over package only after collecting cash from customer.
+                </p>
               </div>
-
-              {selectedReason === "Other exception" && (
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                    Describe Issue
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={customReason}
-                    onChange={(e) => setCustomReason(e.target.value)}
-                    placeholder="Provide details about why the delivery attempt failed..."
-                    className="w-full rounded-xl border border-gray-300 p-2.5 text-xs text-gray-800 focus:border-rose-500 focus:outline-none"
-                    required
-                  />
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setFailureModalOrder(null)}
-                  className="flex-1 rounded-xl border border-gray-200 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingFailure}
-                  className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50"
-                >
-                  {submittingFailure ? "Submitting..." : "Submit Exception"}
-                </button>
+            ) : (
+              <div className="my-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-center text-xs font-bold text-emerald-800">
+                ✓ Order was paid online. No cash collection required.
               </div>
-            </form>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeliveredOrder(null)}
+                className="rounded-xl border border-stone-200 py-3 text-xs font-bold text-stone-700 hover:bg-stone-50 min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeliverOrder}
+                className="rounded-xl bg-emerald-600 py-3 text-xs font-bold text-white hover:bg-emerald-700 shadow-xs min-h-[44px]"
+              >
+                Yes, Delivered
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
-

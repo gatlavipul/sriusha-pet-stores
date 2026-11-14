@@ -146,23 +146,55 @@ export default function Header() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Check user role
+  // Check user role & enforce delivery driver routing
   useEffect(() => {
-    if (user) {
-      fetch("/api/admin/check-role")
-        .then((res) => res.json())
-        .then((data) => {
-          setIsAdmin(Boolean(data?.isAdmin));
-          setIsDeliveryPartner(Boolean(data?.isDeliveryPartner));
-        })
-        .catch(() => {
-          setIsAdmin(false);
-          setIsDeliveryPartner(false);
-        });
-    } else {
-      setIsAdmin(false);
-      setIsDeliveryPartner(false);
+    let active = true;
+
+    async function checkRole() {
+      if (user) {
+        try {
+          const headers = {};
+          if (typeof window !== "undefined" && window.Clerk?.session) {
+            const token = await window.Clerk.session.getToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+          }
+
+          const res = await fetch("/api/admin/check-role", { headers });
+          const data = await res.json();
+          if (!active) return;
+
+          const isAdminUser = Boolean(data?.isAdmin);
+          const isDelivUser = Boolean(data?.isDeliveryPartner || data?.role === "delivery");
+
+          setIsAdmin(isAdminUser);
+          setIsDeliveryPartner(isDelivUser);
+
+          // If user is a delivery driver (and not an admin), route them away from storefront to /delivery
+          if (
+            isDelivUser &&
+            !isAdminUser &&
+            typeof window !== "undefined" &&
+            !window.location.pathname.startsWith("/delivery") &&
+            !window.location.pathname.startsWith("/account/signin")
+          ) {
+            window.location.replace("/delivery");
+          }
+        } catch {
+          if (active) {
+            setIsAdmin(false);
+            setIsDeliveryPartner(false);
+          }
+        }
+      } else {
+        setIsAdmin(false);
+        setIsDeliveryPartner(false);
+      }
     }
+
+    checkRole();
+    return () => {
+      active = false;
+    };
   }, [user]);
 
   // Focus input when mobile search opened

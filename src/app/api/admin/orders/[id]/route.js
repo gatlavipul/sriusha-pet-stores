@@ -54,12 +54,18 @@ export async function GET(request, { params }) {
       ORDER BY h.created_at ASC
     `;
 
-    // Available delivery partners for assignment
+    // Available active delivery partners for assignment
     const deliveryPartners = await sql`
-      SELECT id, name, email 
-      FROM auth_users 
-      WHERE role = 'delivery_partner'
-      ORDER BY name ASC
+      SELECT 
+        COALESCE(u.id, ds.id) as id,
+        u.id as user_id,
+        COALESCE(ds.name, u.name, ds.email) as name,
+        ds.email,
+        COALESCE(ds.phone, u.phone) as phone
+      FROM delivery_staff ds
+      LEFT JOIN auth_users u ON LOWER(u.email) = LOWER(ds.email) OR u.id = ds.user_id
+      WHERE ds.status = 'active'
+      ORDER BY ds.name ASC, ds.email ASC
     `;
 
     // Fetch related admin notifications for this order
@@ -121,8 +127,11 @@ export async function PUT(request, { params }) {
         updates.push(`assigned_delivery_partner_id = NULL`);
       } else {
         const partnerCheck = await sql`
-          SELECT id, name, role FROM auth_users 
-          WHERE id = ${assigned_delivery_partner_id} AND role = 'delivery_partner'
+          SELECT u.id, u.name, u.role 
+          FROM auth_users u
+          LEFT JOIN delivery_staff ds ON LOWER(ds.email) = LOWER(u.email)
+          WHERE u.id = ${assigned_delivery_partner_id} 
+            AND (u.role IN ('delivery', 'delivery_partner') OR ds.status = 'active')
           LIMIT 1
         `;
         if (partnerCheck.length === 0) {

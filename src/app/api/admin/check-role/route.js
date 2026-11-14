@@ -40,15 +40,44 @@ export async function GET(req) {
       });
     }
 
-    const role = users[0].role || "customer";
+    const user = users[0];
+    let role = user.role || "customer";
+    let isDelivery = role === "delivery" || role === "delivery_partner";
+    let deliveryStatus = null;
+
+    // Authoritative check against delivery_staff table
+    try {
+      const staffRows = await sql`
+        SELECT id, role, status 
+        FROM delivery_staff 
+        WHERE LOWER(email) = LOWER(${user.email}) OR user_id = ${user.id} OR clerk_user_id = ${user.clerk_user_id}
+        LIMIT 1
+      `;
+      if (staffRows.length > 0) {
+        deliveryStatus = staffRows[0].status;
+        if (deliveryStatus === "active") {
+          isDelivery = true;
+          if (role !== "admin") role = "delivery";
+        } else if (deliveryStatus === "disabled") {
+          isDelivery = false;
+          if (role !== "admin") role = "customer";
+        }
+      }
+    } catch (err) {
+      console.warn("delivery_staff check error in check-role:", err);
+    }
+
     return Response.json({
       authenticated: true,
       isAdmin: role === "admin",
-      isDeliveryPartner: role === "delivery_partner",
+      isDeliveryPartner: isDelivery,
+      isDelivery: isDelivery,
+      deliveryStatus: deliveryStatus,
+      status: deliveryStatus || "active",
       role,
-      email: users[0].email,
-      name: users[0].name,
-      clerkUserId: users[0].clerk_user_id || null,
+      email: user.email,
+      name: user.name,
+      clerkUserId: user.clerk_user_id || null,
     });
   } catch (error) {
     console.error("Error checking role:", error);

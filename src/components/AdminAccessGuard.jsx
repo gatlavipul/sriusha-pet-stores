@@ -59,10 +59,10 @@ export function useAdminAccess(callbackUrl = "/admin") {
 }
 
 export function AdminAccessRestricted({ role = "customer", email = null }) {
-  const targetPath = role === "delivery_partner" ? "/delivery" : "/account";
-  const targetLabel =
-    role === "delivery_partner" ? "Go to Delivery Portal" : "Go to My Account";
-  const [secondsLeft, setSecondsLeft] = useState(4);
+  const isDeliveryRole = role === "delivery_partner" || role === "delivery";
+  const targetPath = isDeliveryRole ? "/delivery" : "/";
+  const targetLabel = isDeliveryRole ? "Go to Delivery Portal" : "Return to Home";
+  const [secondsLeft, setSecondsLeft] = useState(3);
 
   useEffect(() => {
     const interval = setInterval(() => {

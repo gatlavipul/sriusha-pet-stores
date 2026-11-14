@@ -21,13 +21,52 @@ export default function SignUpPage() {
   const { isLoaded, isSignedIn } = useUser();
   const publishableKey = getClerkPublishableKey();
 
-  // If already signed in, go straight to home
+  // Role-based signup redirection: admin -> /admin, delivery -> /delivery, customer -> Home
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      if (typeof window !== "undefined") {
-        window.location.replace("/");
+    let active = true;
+
+    async function redirectByRole() {
+      if (isLoaded && isSignedIn && typeof window !== "undefined") {
+        try {
+          const headers = {};
+          if (window.Clerk?.session) {
+            const token = await window.Clerk.session.getToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+          }
+
+          const res = await fetch("/api/admin/check-role", { headers });
+          const data = await res.json();
+          if (!active) return;
+
+          const callbackUrl = new URLSearchParams(window.location.search).get("callbackUrl");
+
+          if (data?.isAdmin) {
+            const target = callbackUrl && callbackUrl.startsWith("/admin") ? callbackUrl : "/admin";
+            window.location.replace(target);
+            return;
+          }
+
+          if (data?.isDeliveryPartner || data?.role === "delivery") {
+            window.location.replace("/delivery");
+            return;
+          }
+
+          // Customer
+          const safeCb =
+            callbackUrl && !callbackUrl.startsWith("/admin") && !callbackUrl.startsWith("/delivery")
+              ? callbackUrl
+              : "/";
+          window.location.replace(safeCb);
+        } catch {
+          window.location.replace("/");
+        }
       }
     }
+
+    redirectByRole();
+    return () => {
+      active = false;
+    };
   }, [isLoaded, isSignedIn]);
 
   return (

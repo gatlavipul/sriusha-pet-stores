@@ -83,12 +83,18 @@ export async function PUT(request, { params }) {
       );
     }
 
-    // Verify order exists and is assigned specifically to this delivery partner
-    const existingOrders = await sql`
-      SELECT * FROM orders 
-      WHERE id = ${id} AND assigned_delivery_partner_id = ${partnerId}
-      LIMIT 1
-    `;
+    // Verify order exists and is assigned specifically to this delivery partner (admins can update any)
+    const isAdmin = Boolean(authResult.isAdmin);
+    let existingOrders;
+    if (isAdmin) {
+      existingOrders = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1`;
+    } else {
+      existingOrders = await sql`
+        SELECT * FROM orders 
+        WHERE id = ${id} AND assigned_delivery_partner_id = ${partnerId}
+        LIMIT 1
+      `;
+    }
 
     if (existingOrders.length === 0) {
       return Response.json(
@@ -100,7 +106,8 @@ export async function PUT(request, { params }) {
     const currentOrder = existingOrders[0];
 
     // Enforce role-based state machine transition
-    const transitionError = validateTransition(currentOrder.status, status, "delivery_partner");
+    const effectiveRole = isAdmin ? "admin" : "delivery_partner";
+    const transitionError = validateTransition(currentOrder.status, status, effectiveRole);
     if (transitionError) {
       return Response.json({ error: transitionError }, { status: 400 });
     }
@@ -192,6 +199,7 @@ export async function PUT(request, { params }) {
           status = ${ORDER_STATUS.DELIVERED},
           payment_status = ${targetPaymentStatus},
           delivery_failure_reason = NULL,
+          delivered_at = NOW(),
           updated_at = NOW()
         WHERE id = ${id}
       `;
@@ -234,6 +242,7 @@ export async function PUT(request, { params }) {
         UPDATE orders 
         SET 
           status = ${ORDER_STATUS.OUT_FOR_DELIVERY},
+          picked_up_at = NOW(),
           updated_at = NOW()
         WHERE id = ${id}
       `;
