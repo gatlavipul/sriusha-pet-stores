@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Plus, Minus, AlertCircle, Clock, Heart, Star } from "lucide-react";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
@@ -5,6 +6,7 @@ import { useWishlist } from "@/utils/useWishlist";
 export default function ProductCard({ product }) {
   const { items, addToCart, updateQuantity, removeFromCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const [actionError, setActionError] = useState(null);
 
   const productId = product.product_id || product.id;
   const isWishlisted = isInWishlist(productId);
@@ -18,39 +20,51 @@ export default function ProductCard({ product }) {
   const isLowStock = !isOutOfStock && stock <= 5;
   const isBestSeller = Boolean(product.is_bestseller || (product.id && product.id <= 4));
 
-  const hasDiscount =
-    product.compare_price &&
-    parseFloat(product.compare_price) > 0 &&
-    parseFloat(product.price) > 0;
-  const discountPercent = hasDiscount
-    ? Math.round(
-        (parseFloat(product.compare_price) /
-          (parseFloat(product.price) + parseFloat(product.compare_price))) *
-          100
-      )
+  // Rule 2: Show discount & MRP ONLY when compare_price > price
+  const unitPrice = parseFloat(product.price || 0);
+  const comparePrice = product.compare_price ? parseFloat(product.compare_price) : 0;
+  const hasValidDiscount = comparePrice > unitPrice && unitPrice > 0;
+  const discountPercent = hasValidDiscount
+    ? Math.round(((comparePrice - unitPrice) / comparePrice) * 100)
     : null;
 
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
-    addToCart(product, 1);
+    setActionError(null);
+    const res = await addToCart(product, 1);
+    if (res && !res.success) {
+      setActionError(res.error || "Cannot add more");
+      setTimeout(() => setActionError(null), 3000);
+    }
   };
 
-  const handleIncrement = (e) => {
+  const handleIncrement = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (cartQty >= stock) return;
+    if (cartQty >= stock) {
+      setActionError(`Only ${stock} left in stock`);
+      setTimeout(() => setActionError(null), 2500);
+      return;
+    }
+    setActionError(null);
+    let res;
     if (cartItem) {
-      updateQuantity(cartItem.id, cartQty + 1);
+      res = await updateQuantity(cartItem.id, cartQty + 1);
     } else {
-      addToCart(product, 1);
+      res = await addToCart(product, 1);
+    }
+    if (res && !res.success) {
+      setActionError(res.error || "Quantity limit reached");
+      setTimeout(() => setActionError(null), 3000);
     }
   };
 
   const handleDecrement = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    setActionError(null);
     if (cartQty <= 1) {
       removeFromCart(cartItem ? cartItem.id : productId);
     } else if (cartItem) {
@@ -156,14 +170,22 @@ export default function ProductCard({ product }) {
       </div>
 
       {/* Bottom: Pricing & Quick Add / Quantity Stepper */}
-      <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between gap-2">
+      <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between gap-2 relative">
+        {/* Rollback / error notification */}
+        {actionError && (
+          <div className="absolute -top-7 right-0 rounded-lg bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 shadow-md z-20 whitespace-nowrap">
+            {actionError}
+          </div>
+        )}
+
         <div>
           <div className="text-base sm:text-lg font-black text-[#241819] leading-none">
-            ₹{product.price}
+            ₹{unitPrice.toFixed(0)}
           </div>
-          {product.compare_price && (
-            <div className="text-[11px] text-stone-400 line-through mt-0.5">
-              ₹{(parseFloat(product.price) + parseFloat(product.compare_price)).toFixed(0)}
+          {/* Rule 2: Show MRP only when compare_price > price */}
+          {hasValidDiscount && (
+            <div className="text-[11px] text-stone-400 line-through mt-0.5 font-semibold">
+              ₹{comparePrice.toFixed(0)}
             </div>
           )}
         </div>

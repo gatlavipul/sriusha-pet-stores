@@ -7,7 +7,11 @@ import {
   triggerOrderNotifications,
   NOTIFICATION_TYPES,
 } from "@/utils/notificationService";
-import { validateCheckoutPayload, deductVerifiedOrderStock } from "@/utils/checkoutOrderHelper";
+import {
+  validateCheckoutPayload,
+  executeAtomicOrderTransaction,
+  deductVerifiedOrderStock,
+} from "@/utils/checkoutOrderHelper";
 import { recordOfferRedemption } from "@/utils/offerService";
 import { commitPointRedemption } from "@/utils/loyaltyService";
 import { rateLimiter, getClientIp } from "@/utils/rateLimiter";
@@ -177,70 +181,47 @@ export async function POST(request) {
         ? ORDER_STATUS.PRESCRIPTION_REVIEW
         : ORDER_STATUS.PLACED;
 
-    // 5. Create Order
+    // 5. Create Order atomically inside ONE transaction with stock deduction (Rule 4)
     const deliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
     const isGentleDelivery = Boolean(gentle_delivery);
     const cleanInstructions = sanitizeText(delivery_instructions || "", 300) || null;
 
-    const newOrders = await sql`
-      INSERT INTO orders (
-        user_id, customer_name, customer_email, customer_phone,
-        shipping_address, shipping_city, shipping_pincode,
-        total_amount, payment_intent_id, payment_status, status,
-        delivery_distance, delivery_charge, payment_method,
-        offer_code, offer_discount, points_redeemed, points_discount,
-        prescription_required, prescription_status,
-        delivery_otp, gentle_delivery, delivery_instructions
-      ) VALUES (
-        ${userId}, ${cleanName}, ${cleanEmail}, ${cleanPhone},
-        ${cleanAddress}, ${cleanCity}, ${cleanPincode},
-        ${finalTotal}, NULL, ${paymentStatus}, ${orderStatus},
-        0, ${deliveryCharge}, ${paymentMethod},
-        ${validation.offer?.code || null}, ${discount}, ${pointsRedeemed}, ${pointsDiscount},
-        ${validation.requiresPrescription}, ${validation.verifiedPrescription?.status || null},
-        ${deliveryOtp}, ${isGentleDelivery}, ${cleanInstructions}
-      )
-      RETURNING *
-    `;
-
-    const order = newOrders[0];
-    const orderNumber = `SU-${new Date().getFullYear()}-${String(order.id).padStart(4, "0")}`;
-
-    await sql`UPDATE orders SET order_number = ${orderNumber} WHERE id = ${order.id}`;
-    order.order_number = orderNumber;
-
-    // 6. Insert order items & atomically deduct stock with movement history
-    for (const item of finalOrderItems) {
-      await sql`
-        INSERT INTO order_items (order_id, product_id, variant_id, variant_name, product_name, product_image, quantity, price)
-        VALUES (${order.id}, ${item.product_id}, ${item.variant_id || null}, ${item.variant_name || null}, ${item.name}, ${item.image_url}, ${item.quantity}, ${item.price})
-      `;
-    }
-
-    await deductVerifiedOrderStock({
-      verifiedItems: finalOrderItems,
-      orderId: order.id,
-      userId,
-      userName: cleanName,
-    });
-
-    if (validation.offer?.id) {
-      await recordOfferRedemption({
-        offerId: validation.offer.id,
+    let order;
+    try {
+      order = await executeAtomicOrderTransaction({
         userId,
+        customerName: cleanName,
         customerEmail: cleanEmail,
-        orderId: order.id,
-        discountAmount: discount,
+        customerPhone: cleanPhone,
+        shippingAddress: cleanAddress,
+        shippingCity: cleanCity,
+        shippingPincode: cleanPincode,
+        finalTotal,
+        paymentStatus,
+        orderStatus,
+        deliveryCharge,
+        paymentMethod,
+        offerCode: validation.offer?.code || null,
+        offerDiscount: discount,
+        pointsRedeemed,
+        pointsDiscount,
+        requiresPrescription: validation.requiresPrescription,
+        prescriptionStatus: validation.verifiedPrescription?.status || null,
+        deliveryOtp,
+        isGentleDelivery,
+        deliveryInstructions: cleanInstructions,
+        verifiedItems: finalOrderItems,
+        offerId: validation.offer?.id || null,
       });
-    }
-
-    if (pointsRedeemed > 0) {
-      await commitPointRedemption({
+    } catch (txErr) {
+      logger.error("atomic_order_transaction_failed", txErr.message, {
         userId,
-        orderId: order.id,
-        pointsToRedeem: pointsRedeemed,
-        orderNumber,
+        email: cleanEmail,
       });
+      return Response.json(
+        { error: txErr.message || "Failed to process order. Some items may have become out of stock." },
+        { status: txErr.status || 400 }
+      );
     }
 
     if (validation.verifiedPrescription?.id) {

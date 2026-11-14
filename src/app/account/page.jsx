@@ -4,6 +4,7 @@ import useUser from "@/utils/useUser";
 import useAuth from "@/utils/useAuth";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
+import useStoreSettings from "@/utils/useStoreSettings";
 import PetOnboardingFlow, { getPetEmoji } from "@/components/PetOnboardingFlow";
 import {
   User,
@@ -50,6 +51,7 @@ export default function CustomerAccountPage() {
   const { signOut } = useAuth();
   const { addToCart } = useCart();
   const { toggleWishlist } = useWishlist();
+  const { telUrl } = useStoreSettings();
 
   const openClerkProfile = async () => {
     if (typeof window === "undefined") return;
@@ -1972,7 +1974,7 @@ export default function CustomerAccountPage() {
                     <p className="text-[11px] text-stone-600 font-medium">Uppal, Hyderabad • Store Assistance</p>
                   </div>
                   <a
-                    href="tel:+919440274418"
+                    href={telUrl}
                     className="rounded-lg bg-[#4A0A0F] px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-[#360509]"
                   >
                     Call Vet

@@ -1,7 +1,8 @@
-import { neon } from '@neondatabase/serverless';
+import { neon, Pool } from '@neondatabase/serverless';
 
 let cachedUrl = null;
 let cachedSql = null;
+let cachedPool = null;
 
 function getSql() {
   const url =
@@ -18,8 +19,34 @@ function getSql() {
   if (url !== cachedUrl || !cachedSql) {
     cachedUrl = url;
     cachedSql = neon(url);
+    cachedPool = new Pool({ connectionString: url });
   }
   return cachedSql;
+}
+
+function getPool() {
+  getSql();
+  return cachedPool;
+}
+
+export async function withTransaction(fn) {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rbErr) {
+      console.error('[Neon SQL] Rollback error:', rbErr);
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export const executeSql = async (stringsOrQuery, ...values) => {
@@ -62,5 +89,7 @@ executeSql.transaction = async (queries) => {
   }
   throw new Error('Transactions not available');
 };
+
+executeSql.withTransaction = withTransaction;
 
 export default executeSql;

@@ -73,6 +73,9 @@ Rules:
 ## A7. Database (existing + needed)
 Existing: users, roles, products, product_variants, inventory, orders, order_items, delivery_assignments, delivery_zones, notifications, customer_addresses, wishlist, audit_logs, order_status_history.
 
+### Stock Source of Truth Rule (Phase 3)
+If a product has rows in `product_variants`, variant stock (`product_variants.stock_quantity`) is the **ONLY** source of truth for inventory availability, low stock calculation, and order deductions. The parent `products.stock_quantity` is derived and kept synchronized as the sum of its active variants. When an order item targets a product without variants, the base product stock is used.
+
 May need (add by migration, only when the phase needs it):
 - `pets` (user_id, name, type, breed, age, weight, diet, medical_notes)
 - `stock_reservations` (variant_id, order/cart id, qty, expires_at)

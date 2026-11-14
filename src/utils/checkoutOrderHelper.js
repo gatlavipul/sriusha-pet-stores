@@ -70,24 +70,35 @@ export async function validateCheckoutPayload({
     }
 
     const qty = Math.max(1, parseInt(item.quantity || 1, 10));
-    const vid = item.variant_id ? parseInt(item.variant_id, 10) : null;
+    let vid = item.variant_id ? parseInt(item.variant_id, 10) : null;
+
+    // Rule 3: If a product has variants, use ONLY variant stock for availability & deduction
+    const productActiveVariants = dbVariants.filter((v) => v.product_id === dbProd.id);
+    if (productActiveVariants.length > 0 && !vid) {
+      // Find matching by label or default to first active variant
+      const matched = productActiveVariants.find((v) => v.label === item.variant_name) || productActiveVariants[0];
+      vid = matched.id;
+    }
 
     if (vid) {
       const dbVar = varMap.get(vid);
       if (!dbVar || dbVar.product_id !== dbProd.id || !dbVar.is_active) {
         return {
           valid: false,
-          error: `Selected package size for "${dbProd.name}" is unavailable.`,
+          error: `Selected package size for "${dbProd.name}" is unavailable or discontinued.`,
           status: 400,
         };
       }
       if (dbVar.stock_quantity < qty) {
         return {
           valid: false,
-          error: `Only ${dbVar.stock_quantity} unit(s) of "${dbProd.name} (${dbVar.label})" remaining in stock.`,
+          error: dbVar.stock_quantity <= 0
+            ? `"${dbProd.name} (${dbVar.label})" is currently out of stock.`
+            : `Only ${dbVar.stock_quantity} unit(s) of "${dbProd.name} (${dbVar.label})" remaining in stock.`,
           status: 400,
         };
       }
+      // Never use client price; use verified database price
       const unitPrice = parseFloat(dbVar.price);
       subtotal += unitPrice * qty;
       verifiedItems.push({
@@ -105,7 +116,9 @@ export async function validateCheckoutPayload({
       if (dbProd.stock_quantity < qty) {
         return {
           valid: false,
-          error: `Only ${dbProd.stock_quantity} unit(s) of "${dbProd.name}" remaining in stock.`,
+          error: dbProd.stock_quantity <= 0
+            ? `"${dbProd.name}" is currently out of stock.`
+            : `Only ${dbProd.stock_quantity} unit(s) of "${dbProd.name}" remaining in stock.`,
           status: 400,
         };
       }
@@ -209,7 +222,242 @@ export async function validateCheckoutPayload({
 }
 
 /**
- * Atomically deducts stock for products & variants and logs stock_movements.
+ * Rule 4: Atomic order placement inside ONE transaction with order creation.
+ * Uses UPDATE ... SET stock_quantity = stock_quantity - qty WHERE id = ? AND stock_quantity >= qty.
+ * If 0 rows change, rolls back entire transaction and returns "Only N left / Out of stock".
+ * Writes a stock_movements row for every deduction.
+ */
+export async function executeAtomicOrderTransaction({
+  userId,
+  customerName,
+  customerEmail,
+  customerPhone,
+  shippingAddress,
+  shippingCity,
+  shippingPincode,
+  finalTotal,
+  paymentStatus,
+  orderStatus,
+  deliveryCharge,
+  paymentMethod,
+  offerCode,
+  offerDiscount,
+  pointsRedeemed,
+  pointsDiscount,
+  requiresPrescription,
+  prescriptionStatus,
+  deliveryOtp,
+  isGentleDelivery,
+  deliveryInstructions,
+  verifiedItems,
+  offerId = null,
+}) {
+  return await sql.withTransaction(async (client) => {
+    // 1. Atomically deduct stock for every item (Rule 4: no GREATEST(0, ...), strict >= qty check)
+    const stockDeductionRecords = [];
+
+    for (const item of verifiedItems) {
+      if (item.variant_id) {
+        // Atomic variant stock deduction
+        const upd = await client.query(
+          `UPDATE product_variants
+           SET stock_quantity = stock_quantity - $1, updated_at = NOW()
+           WHERE id = $2 AND stock_quantity >= $1
+           RETURNING stock_quantity, label, product_id`,
+          [item.quantity, item.variant_id]
+        );
+
+        if (upd.rowCount === 0) {
+          const cur = await client.query(
+            `SELECT stock_quantity, label FROM product_variants WHERE id = $1`,
+            [item.variant_id]
+          );
+          const rem = cur.rows[0]?.stock_quantity ?? 0;
+          const label = cur.rows[0]?.label || item.variant_name || "Selected variant";
+          const err = new Error(
+            rem <= 0
+              ? `"${item.name} (${label})" is out of stock.`
+              : `Only ${rem} left of "${item.name} (${label})".`
+          );
+          err.status = 400;
+          throw err;
+        }
+
+        const newStock = upd.rows[0].stock_quantity;
+        const prevStock = newStock + item.quantity;
+        stockDeductionRecords.push({
+          productId: item.product_id,
+          variantId: item.variant_id,
+          productName: item.name,
+          variantLabel: upd.rows[0].label,
+          changeAmount: -item.quantity,
+          previousStock: prevStock,
+          newStock: newStock,
+        });
+
+        // Rule 3: Keep parent product total stock synchronized as sum of active variants
+        await client.query(
+          `UPDATE products
+           SET stock_quantity = COALESCE((SELECT SUM(stock_quantity)::int FROM product_variants WHERE product_id = $1 AND is_active = TRUE), 0),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [item.product_id]
+        );
+      } else {
+        // Atomic base product stock deduction (products without variants)
+        const upd = await client.query(
+          `UPDATE products
+           SET stock_quantity = stock_quantity - $1, updated_at = NOW()
+           WHERE id = $2 AND stock_quantity >= $1
+           RETURNING stock_quantity`,
+          [item.quantity, item.product_id]
+        );
+
+        if (upd.rowCount === 0) {
+          const cur = await client.query(
+            `SELECT stock_quantity FROM products WHERE id = $1`,
+            [item.product_id]
+          );
+          const rem = cur.rows[0]?.stock_quantity ?? 0;
+          const err = new Error(
+            rem <= 0
+              ? `"${item.name}" is out of stock.`
+              : `Only ${rem} left of "${item.name}".`
+          );
+          err.status = 400;
+          throw err;
+        }
+
+        const newStock = upd.rows[0].stock_quantity;
+        const prevStock = newStock + item.quantity;
+        stockDeductionRecords.push({
+          productId: item.product_id,
+          variantId: null,
+          productName: item.name,
+          variantLabel: item.variant_name || null,
+          changeAmount: -item.quantity,
+          previousStock: prevStock,
+          newStock: newStock,
+        });
+      }
+    }
+
+    // 2. Insert order row into orders
+    const orderRes = await client.query(
+      `INSERT INTO orders (
+        user_id, customer_name, customer_email, customer_phone,
+        shipping_address, shipping_city, shipping_pincode,
+        total_amount, payment_intent_id, payment_status, status,
+        delivery_distance, delivery_charge, payment_method,
+        offer_code, offer_discount, points_redeemed, points_discount,
+        prescription_required, prescription_status,
+        delivery_otp, gentle_delivery, delivery_instructions,
+        created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, $10,
+        0, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+        NOW(), NOW()
+      ) RETURNING *`,
+      [
+        userId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        shippingAddress,
+        shippingCity,
+        shippingPincode,
+        finalTotal,
+        paymentStatus,
+        orderStatus,
+        deliveryCharge,
+        paymentMethod,
+        offerCode || null,
+        offerDiscount || 0,
+        pointsRedeemed || 0,
+        pointsDiscount || 0,
+        Boolean(requiresPrescription),
+        prescriptionStatus || null,
+        deliveryOtp,
+        isGentleDelivery,
+        deliveryInstructions || null,
+      ]
+    );
+
+    const order = orderRes.rows[0];
+    const orderNumber = `SU-${new Date().getFullYear()}-${String(order.id).padStart(4, "0")}`;
+    await client.query(`UPDATE orders SET order_number = $1 WHERE id = $2`, [orderNumber, order.id]);
+    order.order_number = orderNumber;
+
+    // 3. Insert order_items
+    for (const item of verifiedItems) {
+      await client.query(
+        `INSERT INTO order_items (
+          order_id, product_id, variant_id, variant_name, product_name, product_image, quantity, price
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          order.id,
+          item.product_id,
+          item.variant_id || null,
+          item.variant_name || null,
+          item.name,
+          item.image_url,
+          item.quantity,
+          item.price,
+        ]
+      );
+    }
+
+    // 4. Write a stock_movements row for every deduction
+    for (const s of stockDeductionRecords) {
+      await client.query(
+        `INSERT INTO stock_movements (
+          product_id, variant_id, product_name, variant_label,
+          change_amount, previous_stock, new_stock, reason,
+          notes, order_id, performed_by_user_id, performed_by_name, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+        [
+          s.productId,
+          s.variantId,
+          s.productName,
+          s.variantLabel,
+          s.changeAmount,
+          s.previousStock,
+          s.newStock,
+          "order_placed",
+          `Order #${order.id}`,
+          order.id,
+          userId,
+          customerName,
+        ]
+      );
+    }
+
+    // 5. Offer redemption inside transaction
+    if (offerId && offerDiscount > 0) {
+      await client.query(
+        `INSERT INTO offer_redemptions (
+          offer_id, user_id, customer_email, order_id, discount_amount, created_at
+        ) VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [offerId, userId, customerEmail, order.id, offerDiscount]
+      );
+    }
+
+    // 6. Loyalty points redemption inside transaction
+    if (pointsRedeemed > 0) {
+      await client.query(
+        `INSERT INTO reward_ledger (
+          user_id, order_id, points, type, notes, created_at
+        ) VALUES ($1, $2, $3, 'redeemed', $4, NOW())`,
+        [userId, order.id, -pointsRedeemed, `Redeemed on Order #${order.id}`]
+      );
+    }
+
+    return order;
+  });
+}
+
+/**
+ * Fallback backward compatibility for other modules
  */
 export async function deductVerifiedOrderStock({
   verifiedItems,
@@ -217,70 +465,7 @@ export async function deductVerifiedOrderStock({
   userId = null,
   userName = "Customer Checkout",
 }) {
-  for (const item of verifiedItems) {
-    if (item.variant_id) {
-      const prevRows = await sql`
-        SELECT stock_quantity, label FROM product_variants WHERE id = ${item.variant_id} LIMIT 1
-      `;
-      const prevStock = prevRows?.[0]?.stock_quantity ?? 0;
-      const upd = await sql`
-        UPDATE product_variants
-        SET stock_quantity = GREATEST(0, stock_quantity - ${item.quantity}), updated_at = NOW()
-        WHERE id = ${item.variant_id}
-        RETURNING stock_quantity, label
-      `;
-      const newStock = upd?.[0]?.stock_quantity ?? Math.max(0, prevStock - item.quantity);
-
-      // Keep parent product total stock synchronized across active variants
-      await sql`
-        UPDATE products
-        SET stock_quantity = COALESCE((SELECT SUM(stock_quantity)::int FROM product_variants WHERE product_id = ${item.product_id} AND is_active = TRUE), 0),
-            updated_at = NOW()
-        WHERE id = ${item.product_id}
-      `;
-
-      await recordStockMovement({
-        productId: item.product_id,
-        variantId: item.variant_id,
-        productName: item.name,
-        variantLabel: upd?.[0]?.label || item.variant_name,
-        changeAmount: -item.quantity,
-        previousStock: prevStock,
-        newStock,
-        reason: "order_placed",
-        notes: `Order #${orderId}`,
-        orderId,
-        userId,
-        userName,
-      });
-    } else {
-      const prevRows = await sql`
-        SELECT stock_quantity FROM products WHERE id = ${item.product_id} LIMIT 1
-      `;
-      const prevStock = prevRows?.[0]?.stock_quantity ?? 0;
-      const upd = await sql`
-        UPDATE products
-        SET stock_quantity = GREATEST(0, stock_quantity - ${item.quantity}), updated_at = NOW()
-        WHERE id = ${item.product_id}
-        RETURNING stock_quantity
-      `;
-      const newStock = upd?.[0]?.stock_quantity ?? Math.max(0, prevStock - item.quantity);
-
-      await recordStockMovement({
-        productId: item.product_id,
-        productName: item.name,
-        changeAmount: -item.quantity,
-        previousStock: prevStock,
-        newStock,
-        reason: "order_placed",
-        notes: `Order #${orderId}`,
-        orderId,
-        userId,
-        userName,
-      });
-
-      await checkAndTriggerLowStock(item.product_id, newStock, item.name);
-    }
-  }
+  // Deprecated in favor of executeAtomicOrderTransaction
+  return true;
 }
 

@@ -35,9 +35,11 @@ export async function POST(request, { params }) {
     // Role-based cancellation check
     // Customers cannot cancel once the order has reached delivery transit
     if (!isAdmin && !isCancellableByCustomer(order.status)) {
+      const phoneSettings = await sql`SELECT value FROM settings WHERE key = 'store_phone' LIMIT 1`;
+      const supportPhone = phoneSettings[0]?.value || "+91 94402 74418";
       return Response.json(
         {
-          error: `Order cannot be cancelled in its current stage ('${order.status}'). Items have already been dispatched or delivered. Please contact customer care at +91 98765 43210 for support.`,
+          error: `Order cannot be cancelled in its current stage ('${order.status}'). Items have already been dispatched or delivered. Please contact customer care at ${supportPhone} for support.`,
         },
         { status: 400 }
       );

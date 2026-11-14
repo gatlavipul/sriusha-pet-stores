@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
+import useStoreSettings from "@/utils/useStoreSettings";
 import {
   ShoppingCart,
   Zap,
@@ -22,6 +23,7 @@ import {
 export default function ProductDetailPage({ params }) {
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { storePhone, telUrl } = useStoreSettings();
 
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -423,68 +425,68 @@ export default function ProductDetailPage({ params }) {
 
             {/* Pricing Section */}
             <div className="mt-5 rounded-2xl bg-stone-50 border border-stone-200/80 p-4">
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-center gap-3">
                 <span className="text-3xl sm:text-4xl font-extrabold text-[#0F172A]">
                   ₹{activePrice.toFixed(0)}
                 </span>
+                {/* Rule 2: Show MRP and discount ONLY when MRP > selling price */}
                 {activeComparePrice && activeComparePrice > activePrice && (
-                  <span className="text-base sm:text-lg text-gray-400 line-through">
-                    ₹{activeComparePrice.toFixed(0)}
-                  </span>
+                  <>
+                    <span className="text-base sm:text-lg text-gray-400 line-through font-semibold">
+                      ₹{activeComparePrice.toFixed(0)}
+                    </span>
+                    <span className="rounded-md bg-[#DC2626] px-2 py-0.5 text-xs font-black text-white shadow-xs">
+                      {Math.round(((activeComparePrice - activePrice) / activeComparePrice) * 100)}% OFF
+                    </span>
+                  </>
                 )}
               </div>
+              {selectedVariantObj?.sku && (
+                <div className="text-[11px] font-mono text-stone-400 mt-1">
+                  SKU: {selectedVariantObj.sku}
+                </div>
+              )}
               <div className="text-[11px] text-gray-500 mt-1">
-                Inclusive of all taxes. Free delivery in Hyderabad on orders over ₹500.
+                Inclusive of all taxes • Authentic Hyderabad store inventory
               </div>
             </div>
 
             {/* Variants */}
-            {(structuredVariants.length > 0 || variants.length > 0) && (
+            {structuredVariants.length > 0 && (
               <div className="mt-6">
                 <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
                   Select Pack Size / Weight:
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {structuredVariants.length > 0
-                    ? structuredVariants.map((v) => {
-                        const isSelected = selectedVariantObj?.id === v.id;
-                        const vOut = Number(v.stock_quantity) <= 0;
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedVariantObj(v);
-                              setSelectedVariant(v.label);
-                              setQuantity(1);
-                            }}
-                            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all text-left ${
-                              isSelected
-                                ? "border-2 border-[#4A0A0F] bg-[#FFF7ED] text-[#4A0A0F] shadow-2xs"
-                                : "border border-stone-200 bg-white text-stone-700 hover:border-stone-300"
-                            } ${vOut ? "opacity-55" : ""}`}
-                          >
-                            <div>{v.label}</div>
-                            <div className="text-[11px] font-semibold text-stone-500">
-                              ₹{parseFloat(v.price).toFixed(0)} • {vOut ? "Out" : `${v.stock_quantity} left`}
-                            </div>
-                          </button>
-                        );
-                      })
-                    : variants.map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => setSelectedVariant(v)}
-                          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                            selectedVariant === v
-                              ? "border-2 border-[#4A0A0F] bg-[#FFF7ED] text-[#4A0A0F] shadow-2xs"
-                              : "border border-stone-200 bg-white text-stone-700 hover:border-stone-300"
-                          }`}
-                        >
-                          {v}
-                        </button>
-                      ))}
+                  {structuredVariants.map((v) => {
+                    const isSelected = selectedVariantObj?.id === v.id;
+                    const vOut = Number(v.stock_quantity) <= 0;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        disabled={vOut}
+                        onClick={() => {
+                          if (vOut) return;
+                          setSelectedVariantObj(v);
+                          setSelectedVariant(v.label);
+                          setQuantity(1);
+                        }}
+                        className={`rounded-xl px-4 py-2.5 text-xs font-bold transition-all text-left ${
+                          vOut
+                            ? "border border-stone-200 bg-stone-100 text-stone-400 opacity-60 cursor-not-allowed"
+                            : isSelected
+                            ? "border-2 border-[#4A0A0F] bg-[#FFF7ED] text-[#4A0A0F] shadow-2xs"
+                            : "border border-stone-200 bg-white text-stone-700 hover:border-stone-300"
+                        }`}
+                      >
+                        <div className={vOut ? "line-through" : ""}>{v.label}</div>
+                        <div className="text-[11px] font-semibold text-stone-500 mt-0.5">
+                          ₹{parseFloat(v.price).toFixed(0)} • {vOut ? "Out of stock" : `${v.stock_quantity} in stock`}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -707,7 +709,10 @@ export default function ProductDetailPage({ params }) {
                 {activeTab === "safety" && (
                   <div className="space-y-2">
                     <p>
-                      Store in a dry, ventilated area. For any special prescription concerns, our Hyderabad clinic team is available at +91 98765 43210.
+                      Store in a dry, ventilated area. For any special prescription concerns, our Hyderabad clinic team is available at{" "}
+                      <a href={telUrl} className="font-bold text-[#F97316] hover:underline">
+                        {storePhone}
+                      </a>.
                     </p>
                   </div>
                 )}

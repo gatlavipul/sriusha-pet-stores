@@ -24,6 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
+import useStoreSettings from "@/utils/useStoreSettings";
 import {
   ORDER_STATUS,
   ORDER_STATUS_METADATA,
@@ -34,6 +35,7 @@ import {
 
 export default function OrderDetailPage({ params }) {
   const { data: user } = useUser();
+  const { storePhone, telUrl } = useStoreSettings();
   const [order, setOrder] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -637,9 +639,9 @@ export default function OrderDetailPage({ params }) {
                 <HelpCircle size={14} />
                 <span>Report Issue / Support Ticket</span>
               </button>
-              <a href="tel:+919876543210" className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:text-[#F97316]">
+              <a href={telUrl} className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:text-[#F97316]">
                 <Phone size={13} strokeWidth={1.75} className="text-[#F97316]" />
-                <span>+91 98765 43210</span>
+                <span>{storePhone}</span>
               </a>
             </div>
             <a

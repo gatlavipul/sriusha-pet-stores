@@ -5,6 +5,7 @@ import ProductCard from "@/components/ProductCard";
 import useCart from "@/utils/useCart";
 import useUser from "@/utils/useUser";
 import { useWishlist } from "@/utils/useWishlist";
+import useStoreSettings from "@/utils/useStoreSettings";
 import {
   ArrowRight,
   ShieldCheck,
@@ -77,6 +78,7 @@ export default function HomePage() {
   const { addToCart } = useCart();
   const { data: user } = useUser();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { storePhone, telUrl } = useStoreSettings();
   const [addedIds, setAddedIds] = useState({});
   const [buyAgainItems, setBuyAgainItems] = useState([]);
   const [primaryPetName, setPrimaryPetName] = useState("");
@@ -680,13 +682,13 @@ export default function HomePage() {
                   </div>
                   <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3.5 py-2">
                     <Phone size={16} strokeWidth={1.75} className="text-[#FACC15]" />
-                    <span>Store Support: +91 98765 43210</span>
+                    <span>Store Support: {storePhone}</span>
                   </div>
                 </div>
               </div>
               <div className="lg:col-span-4 text-center lg:text-right">
                 <a
-                  href="tel:+919876543210"
+                  href={telUrl}
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#F97316] px-6 py-4 text-sm font-bold text-white shadow-lg hover:bg-[#EA580C] transition-all"
                 >
                   <Phone size={18} strokeWidth={1.75} />
@@ -759,10 +761,10 @@ export default function HomePage() {
                 Hyderabad, Telangana - 500039
               </p>
               <div className="mt-3 text-xs text-stone-400">
-                <div className="flex items-center gap-1.5 text-stone-300 font-semibold">
+                <a href={telUrl} className="flex items-center gap-1.5 text-stone-300 font-semibold hover:text-[#F97316] transition-colors">
                   <Phone size={13} strokeWidth={1.75} className="text-[#F97316]" />
-                  <span>+91 98765 43210</span>
-                </div>
+                  <span>{storePhone}</span>
+                </a>
                 <div className="mt-1">Hours: 9:00 AM - 9:30 PM (Daily)</div>
               </div>
             </div>

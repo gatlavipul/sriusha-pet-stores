@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router';
 import { Home, Search, ShoppingBag, ArrowLeft, Heart, Phone, Dog } from 'lucide-react';
+import useStoreSettings from '@/utils/useStoreSettings';
 
 type LoaderArgs = {
   params: Record<string, string | undefined>;
@@ -17,6 +18,7 @@ export default function SriUshaNotFoundPage({
   loaderData: Awaited<ReturnType<typeof loader>>;
 }) {
   const navigate = useNavigate();
+  const { whatsAppUrl } = useStoreSettings();
   const path = loaderData?.path || '';
 
   return (
@@ -142,7 +144,7 @@ export default function SriUshaNotFoundPage({
             </button>
             <span>•</span>
             <a
-              href="https://wa.me/919999999999"
+              href={whatsAppUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 font-semibold"
