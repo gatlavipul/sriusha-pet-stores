@@ -75,8 +75,9 @@ export default function SignUpPage() {
               signInUrl="/account/signin"
               appearance={{
                 elements: {
-                  rootBox: "w-full max-w-md",
-                  card: "rounded-2xl border border-[#EADBCC] bg-white shadow-lg p-6",
+                  rootBox: "w-full max-w-full mx-auto",
+                  cardBox: "w-full max-w-full mx-auto shadow-none",
+                  card: "w-full max-w-full rounded-2xl border border-[#EADBCC] bg-white shadow-lg p-4 sm:p-6 mx-auto",
                   headerTitle: "text-lg font-black text-[#4A0A0F]",
                   headerSubtitle: "text-xs text-stone-500",
                   socialButtonsBlockButton:
