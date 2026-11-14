@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Header from "@/components/Header";
-import useUser from "@/utils/useUser";
-import useAuth from "@/utils/useAuth";
+import { useUser as useClerkUser, useClerk } from "@clerk/clerk-react";
 import useCart from "@/utils/useCart";
 import { useWishlist } from "@/utils/useWishlist";
-import useStoreSettings from "@/utils/useStoreSettings";
+import { authFetch } from "@/utils/apiClient";
 import PetOnboardingFlow, { getPetEmoji } from "@/components/PetOnboardingFlow";
 import {
   User,
@@ -14,7 +13,6 @@ import {
   LogOut,
   Shield,
   Truck,
-  ExternalLink,
   Plus,
   Clock,
   CheckCircle,
@@ -22,17 +20,19 @@ import {
   PawPrint,
   Pencil,
   Trash2,
-  ShoppingBag,
-  Upload,
   Loader2,
   FileText,
   Sparkles,
   Gift,
   RotateCcw,
-  Dog,
-  Cat,
-  Bird,
-  Zap,
+  Home,
+  Briefcase,
+  Building2,
+  Check,
+  ChevronRight,
+  Phone,
+  Mail,
+  X,
 } from "lucide-react";
 
 const STATUS_BADGE = {
@@ -46,111 +46,369 @@ const STATUS_BADGE = {
   cancelled: "bg-red-50 text-red-700 border-red-200",
 };
 
+// Skeleton Placeholder for Account Screen
+function AccountSkeleton() {
+  return (
+    <div className="min-h-screen bg-[#FFFDF9] pb-24">
+      <Header />
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 space-y-5 animate-pulse">
+        {/* Profile Card Skeleton */}
+        <div className="rounded-3xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs flex items-center gap-4">
+          <div className="h-16 w-16 rounded-2xl bg-stone-200 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-5 w-40 rounded-lg bg-stone-200" />
+            <div className="h-3.5 w-52 rounded-lg bg-stone-100" />
+            <div className="h-3.5 w-32 rounded-lg bg-stone-100" />
+          </div>
+        </div>
+
+        {/* Tab Buttons Skeleton */}
+        <div className="flex gap-2 overflow-x-hidden pb-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-11 w-28 rounded-2xl bg-stone-200 shrink-0" />
+          ))}
+        </div>
+
+        {/* Content Skeleton Cards */}
+        <div className="space-y-3">
+          <div className="h-28 rounded-3xl bg-white border border-stone-200 p-4" />
+          <div className="h-28 rounded-3xl bg-white border border-stone-200 p-4" />
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function CustomerAccountPage() {
-  const { data: user, loading: userLoading } = useUser();
-  const { signOut } = useAuth();
+  const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useClerkUser();
+  const { signOut } = useClerk();
   const { addToCart } = useCart();
   const { toggleWishlist } = useWishlist();
-  const { telUrl } = useStoreSettings();
 
-  const openClerkProfile = async () => {
-    if (typeof window === "undefined") return;
-    if (window.Clerk?.openUserProfile) {
-      window.Clerk.openUserProfile();
-      return;
-    }
-    window.location.href = "/account/signin?callbackUrl=/account?tab=profile";
-  };
-
+  // Primary Data States
   const [profile, setProfile] = useState(null);
   const [orders, setOrders] = useState([]);
   const [addresses, setAddresses] = useState([]);
-  const [wishlistItems, setWishlistItems] = useState([]);
   const [pets, setPets] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
+  const [wishlistItems, setWishlistItems] = useState([]);
 
-  const [loadingProfile, setLoadingProfile] = useState(true);
-  const [loadingOrders, setLoadingOrders] = useState(true);
-  const [loadingAddresses, setLoadingAddresses] = useState(true);
-  const [loadingWishlist, setLoadingWishlist] = useState(true);
-  const [loadingPets, setLoadingPets] = useState(true);
+  // Loading, Timeout & Error States
+  const [loadingData, setLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const timeoutRef = useRef(null);
 
+  // Active Tab: orders | addresses | pets | wishlist
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined") {
       const tab = new URLSearchParams(window.location.search).get("tab");
-      if (["orders", "pets", "addresses", "wishlist", "profile"].includes(tab)) {
+      if (["orders", "addresses", "pets", "wishlist"].includes(tab)) {
         return tab;
       }
     }
     return "orders";
   });
 
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  // Toast Feedback State
   const [toast, setToast] = useState(null);
+  const notify = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
-  // Profile edit state
-  const [profileName, setProfileName] = useState("");
+  // Profile Edit Modal State
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Address modal/form state
-  const [showAddAddress, setShowAddAddress] = useState(false);
+  // Address Modal State (Add / Edit)
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState(null);
   const [savingAddress, setSavingAddress] = useState(false);
-  const [newAddress, setNewAddress] = useState({
+  const [addressForm, setAddressForm] = useState({
     name: "",
     phone: "",
-    address_line: "",
+    house_no: "",
+    street_area: "",
+    landmark: "",
     city: "Hyderabad",
     state: "Telangana",
     pincode: "",
+    label: "Home",
     is_default: false,
   });
 
-  // Pet Add/Edit modal state
+  // Pet Modal State
   const [showPetModal, setShowPetModal] = useState(false);
   const [editingPet, setEditingPet] = useState(null);
   const [savingPet, setSavingPet] = useState(false);
-  const [uploadingPetPhoto, setUploadingPetPhoto] = useState(false);
   const [petForm, setPetForm] = useState({
     name: "",
     type: "dog",
     breed: "",
     age: "",
     food_preference: "",
-    care_interests_text: "",
-    image_url: "",
   });
 
-  const notify = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
-
-  // Guard against unauthenticated visits
+  // Guard: Redirect signed-out visitors to signin
   useEffect(() => {
-    if (!userLoading && !user) {
+    if (clerkLoaded && !isSignedIn) {
       if (typeof window !== "undefined") {
         window.location.href = "/account/signin?callbackUrl=/account";
       }
     }
-  }, [user, userLoading]);
+  }, [clerkLoaded, isSignedIn]);
 
-  const [rewardsData, setRewardsData] = useState(null);
-  const [prescriptions, setPrescriptions] = useState([]);
-  const [activeOffers, setActiveOffers] = useState([]);
-  const [pantryItems, setPantryItems] = useState([]);
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [healthRecords, setHealthRecords] = useState([]);
-  const [healthForm, setHealthForm] = useState({
-    pet_id: "",
-    record_type: "vaccination",
-    title: "",
-    record_date: "",
-    next_due_date: "",
-    clinic_name: "",
-    notes: "",
-  });
-  const [savingHealth, setSavingHealth] = useState(false);
+  // Main Data Fetcher
+  const fetchAllAccountData = useCallback(async () => {
+    setLoadingData(true);
+    setLoadError(null);
 
+    // 10-second timeout guarantee
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setLoadError("Account details took longer than 10 seconds to load.");
+      setLoadingData(false);
+      console.error("[Account] Request timed out after 10s");
+    }, 10000);
+
+    try {
+      // 1. Fetch Profile
+      const meRes = await authFetch("/api/account/me", { timeout: 9000 });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData?.user) {
+          setProfile(meData.user);
+          setEditName(meData.user.name || "");
+          setEditPhone(meData.user.phone || "");
+        }
+      }
+
+      // 2. Fetch Addresses
+      const addrRes = await authFetch("/api/addresses", { timeout: 9000 });
+      if (addrRes.ok) {
+        const addrData = await addrRes.json();
+        setAddresses(addrData.addresses || []);
+      }
+
+      // 3. Fetch Orders
+      const ordRes = await authFetch("/api/orders", { timeout: 9000 });
+      if (ordRes.ok) {
+        const ordData = await ordRes.json();
+        setOrders(ordData.orders || []);
+      }
+
+      // 4. Fetch Pets
+      const petsRes = await authFetch("/api/pets", { timeout: 9000 });
+      if (petsRes.ok) {
+        const petsData = await petsRes.json();
+        setPets(petsData.pets || []);
+      }
+
+      // 5. Fetch Wishlist
+      const wishRes = await authFetch("/api/wishlist", { timeout: 9000 });
+      if (wishRes.ok) {
+        const wishData = await wishRes.json();
+        setWishlistItems(wishData.items || []);
+      }
+
+      clearTimeout(timeoutRef.current);
+      setLoadingData(false);
+    } catch (err) {
+      clearTimeout(timeoutRef.current);
+      console.error("[Account] Error fetching account data:", err);
+      setLoadError(err.message || "Unable to connect to Sri Usha store servers.");
+      setLoadingData(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (clerkLoaded && isSignedIn) {
+      fetchAllAccountData();
+    }
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [clerkLoaded, isSignedIn, fetchAllAccountData]);
+
+  // Handle Profile Save
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    if (!editName.trim() || editName.trim().length < 2) {
+      notify("Please enter a valid full name (at least 2 letters).", "error");
+      return;
+    }
+    const cleanPhone = editPhone.trim().replace(/\D/g, "");
+    if (cleanPhone && cleanPhone.length !== 10) {
+      notify("Please enter a valid 10-digit mobile number.", "error");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const res = await authFetch("/api/account/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          phone: cleanPhone || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update profile");
+      setProfile(data.user);
+      setShowEditProfileModal(false);
+      notify("Profile details updated successfully.");
+    } catch (err) {
+      console.error("[Account] Profile update error:", err);
+      notify(err.message || "Failed to update profile", "error");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Open Add Address Modal
+  const openAddAddressModal = () => {
+    setEditingAddressId(null);
+    setAddressForm({
+      name: profile?.name || clerkUser?.fullName || "",
+      phone: profile?.phone || "",
+      house_no: "",
+      street_area: "",
+      landmark: "",
+      city: "Hyderabad",
+      state: "Telangana",
+      pincode: "500039",
+      label: "Home",
+      is_default: addresses.length === 0,
+    });
+    setShowAddressModal(true);
+  };
+
+  // Open Edit Address Modal
+  const openEditAddressModal = (addr) => {
+    setEditingAddressId(addr.id);
+    setAddressForm({
+      name: addr.name || "",
+      phone: addr.phone || "",
+      house_no: addr.house_no || "",
+      street_area: addr.street_area || "",
+      landmark: addr.landmark || "",
+      city: addr.city || "Hyderabad",
+      state: addr.state || "Telangana",
+      pincode: addr.pincode || "",
+      label: addr.label || "Home",
+      is_default: Boolean(addr.is_default),
+    });
+    setShowAddressModal(true);
+  };
+
+  // Save Address (Create or Update)
+  const handleSaveAddress = async (e) => {
+    e.preventDefault();
+    const cleanPhone = (addressForm.phone || "").trim().replace(/\D/g, "");
+    const cleanPin = (addressForm.pincode || "").trim().replace(/\D/g, "");
+
+    if (!addressForm.name.trim() || addressForm.name.trim().length < 2) {
+      notify("Please enter recipient's full name.", "error");
+      return;
+    }
+    if (cleanPhone.length !== 10) {
+      notify("Please enter a valid 10-digit mobile number.", "error");
+      return;
+    }
+    if (!addressForm.house_no.trim()) {
+      notify("Flat / House / Building number is required.", "error");
+      return;
+    }
+    if (!addressForm.street_area.trim()) {
+      notify("Street / Area / Colony is required.", "error");
+      return;
+    }
+    if (cleanPin.length !== 6) {
+      notify("Please enter a valid 6-digit Hyderabad pincode.", "error");
+      return;
+    }
+
+    setSavingAddress(true);
+    try {
+      const isEditing = Boolean(editingAddressId);
+      const url = isEditing
+        ? `/api/addresses/${editingAddressId}`
+        : "/api/addresses";
+      const method = isEditing ? "PUT" : "POST";
+
+      const res = await authFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...addressForm,
+          phone: cleanPhone,
+          pincode: cleanPin,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save address");
+
+      setShowAddressModal(false);
+      // Refresh addresses list
+      const addrRes = await authFetch("/api/addresses");
+      if (addrRes.ok) {
+        const addrData = await addrRes.json();
+        setAddresses(addrData.addresses || []);
+      }
+      notify(isEditing ? "Delivery address updated." : "New address saved successfully.");
+    } catch (err) {
+      console.error("[Account] Save address error:", err);
+      notify(err.message || "Failed to save address", "error");
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  // Set Address as Default
+  const handleSetDefaultAddress = async (id) => {
+    try {
+      const res = await authFetch(`/api/addresses/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ set_default: true }),
+      });
+      if (!res.ok) throw new Error("Failed to set default address");
+      setAddresses((prev) =>
+        prev.map((a) => ({
+          ...a,
+          is_default: a.id === id,
+        }))
+      );
+      notify("Default address updated.");
+    } catch (err) {
+      console.error("[Account] Set default error:", err);
+      notify(err.message || "Failed to set default address", "error");
+    }
+  };
+
+  // Delete Address
+  const handleDeleteAddress = async (id) => {
+    if (!confirm("Are you sure you want to remove this delivery address?")) return;
+    try {
+      const res = await authFetch(`/api/addresses/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove address");
+      // Refresh addresses list
+      const addrRes = await authFetch("/api/addresses");
+      if (addrRes.ok) {
+        const addrData = await addrRes.json();
+        setAddresses(addrData.addresses || []);
+      }
+      notify("Address removed.");
+    } catch (err) {
+      console.error("[Account] Delete address error:", err);
+      notify(err.message || "Failed to remove address", "error");
+    }
+  };
+
+  // Reorder Cart Handler
   const handleReorder = async (order) => {
     if (!order?.items || order.items.length === 0) return;
     for (const item of order.items) {
@@ -171,668 +429,186 @@ export default function CustomerAccountPage() {
     window.location.href = "/cart";
   };
 
-  const fetchProfileAndPets = useCallback(async () => {
+  // Sign Out Handler
+  const handleSignOut = async () => {
     try {
-      setLoadingProfile(true);
-      setLoadingPets(true);
-      const [meRes, petsRes, recRes, rewRes, rxRes, offRes, pantryRes, subRes, healthRes] = await Promise.all([
-        fetch("/api/account/me"),
-        fetch("/api/pets"),
-        fetch("/api/pets/recommendations"),
-        fetch("/api/rewards"),
-        fetch("/api/prescriptions"),
-        fetch("/api/offers"),
-        fetch("/api/pantry"),
-        fetch("/api/subscriptions"),
-        fetch("/api/pets/health"),
-      ]);
-      if (rewRes?.ok) {
-        setRewardsData(await rewRes.json());
-      }
-      if (rxRes?.ok) {
-        const rxData = await rxRes.json();
-        setPrescriptions(rxData.prescriptions || []);
-      }
-      if (offRes?.ok) {
-        const offData = await offRes.json();
-        setActiveOffers(offData.offers || []);
-      }
-      if (pantryRes?.ok) {
-        const pantryData = await pantryRes.json();
-        setPantryItems(pantryData.pantry || []);
-      }
-      if (subRes?.ok) {
-        const subData = await subRes.json();
-        setSubscriptions(subData.subscriptions || []);
-      }
-      if (healthRes?.ok) {
-        const healthData = await healthRes.json();
-        setHealthRecords(healthData.records || []);
-      }
-
-      let loadedProfile = null;
-      if (meRes.ok) {
-        const meData = await meRes.json();
-        loadedProfile = meData.user;
-        setProfile(loadedProfile);
-        setProfileName(loadedProfile?.name || "");
-      }
-
-      let loadedPets = [];
-      if (petsRes.ok) {
-        const petsData = await petsRes.json();
-        loadedPets = petsData.pets || [];
-        setPets(loadedPets);
-
-        const completed =
-          petsData.onboarding_completed ||
-          loadedProfile?.pet_onboarding_completed ||
-          loadedPets.length > 0;
-        setShowOnboarding(!completed);
-      }
-
-      if (recRes.ok) {
-        const recData = await recRes.json();
-        setRecommendations(recData.recommendations || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch profile/pets:", err);
-    } finally {
-      setLoadingProfile(false);
-      setLoadingPets(false);
+      await signOut();
+    } catch (e) {
+      console.warn("[Account] Clerk signOut:", e);
     }
-  }, []);
-
-  const fetchOrders = useCallback(async () => {
-    try {
-      setLoadingOrders(true);
-      const res = await fetch("/api/orders");
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders || []);
-      }
-    } catch (err) {
-      console.error("Error fetching orders:", err);
-    } finally {
-      setLoadingOrders(false);
-    }
-  }, []);
-
-  const fetchAddresses = useCallback(async () => {
-    try {
-      setLoadingAddresses(true);
-      const res = await fetch("/api/addresses");
-      if (res.ok) {
-        const data = await res.json();
-        setAddresses(data.addresses || []);
-      }
-    } catch (err) {
-      console.error("Error fetching addresses:", err);
-    } finally {
-      setLoadingAddresses(false);
-    }
-  }, []);
-
-  const fetchWishlist = useCallback(async () => {
-    try {
-      setLoadingWishlist(true);
-      const res = await fetch("/api/wishlist");
-      if (res.ok) {
-        const data = await res.json();
-        setWishlistItems(data.items || []);
-      }
-    } catch (err) {
-      console.error("Error fetching wishlist:", err);
-    } finally {
-      setLoadingWishlist(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      fetchProfileAndPets();
-      fetchOrders();
-      fetchAddresses();
-      fetchWishlist();
-    }
-  }, [user, fetchProfileAndPets, fetchOrders, fetchAddresses, fetchWishlist]);
-
-  const handleSaveProfile = async (e) => {
-    e.preventDefault();
-    if (!profileName.trim() || profileName.trim().length < 2) {
-      notify("Please enter a valid display name.", "error");
-      return;
-    }
-    setSavingProfile(true);
-    try {
-      const res = await fetch("/api/account/me", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: profileName.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Update failed");
-      setProfile(data.user);
-      notify("Profile name updated.");
-    } catch (err) {
-      notify(err.message || "Failed to update profile", "error");
-    } finally {
-      setSavingProfile(false);
-    }
+    window.location.href = "/account/signin";
   };
 
-  const handleAddAddress = async (e) => {
-    e.preventDefault();
-    setSavingAddress(true);
-    try {
-      const res = await fetch("/api/addresses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newAddress),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save address");
-      setShowAddAddress(false);
-      setNewAddress({
-        name: "",
-        phone: "",
-        address_line: "",
-        city: "Hyderabad",
-        state: "Telangana",
-        pincode: "",
-        is_default: false,
-      });
-      fetchAddresses();
-      notify("Delivery address saved.");
-    } catch (err) {
-      notify(err.message || "Error adding address", "error");
-    } finally {
-      setSavingAddress(false);
-    }
-  };
+  // 1. Initial Clerk loading state -> skeleton
+  if (!clerkLoaded) {
+    return <AccountSkeleton />;
+  }
 
-  const handleSetDefaultAddress = async (id) => {
-    try {
-      const res = await fetch(`/api/addresses/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ set_default: true }),
-      });
-      if (res.ok) {
-        fetchAddresses();
-        notify("Default address updated.");
-      }
-    } catch (err) {
-      console.error("Failed to set default address:", err);
-    }
-  };
-
-  const handleDeleteAddress = async (id) => {
-    try {
-      const res = await fetch(`/api/addresses/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        fetchAddresses();
-        notify("Address removed.");
-      }
-    } catch (err) {
-      console.error("Failed to delete address:", err);
-    }
-  };
-
-  const openAddPetModal = () => {
-    setEditingPet(null);
-    setPetForm({
-      name: "",
-      type: "dog",
-      breed: "",
-      age: "",
-      food_preference: "",
-      care_interests_text: "",
-      image_url: "",
-    });
-    setShowPetModal(true);
-  };
-
-  const openEditPetModal = (pet) => {
-    setEditingPet(pet);
-    setPetForm({
-      name: pet.name || "",
-      type: pet.type || "dog",
-      breed: pet.breed || "",
-      age: pet.age || "",
-      food_preference: pet.preferences?.food_preference || "",
-      care_interests_text: Array.isArray(pet.preferences?.care_interests)
-        ? pet.preferences.care_interests.join(", ")
-        : "",
-      image_url: pet.image_url || "",
-    });
-    setShowPetModal(true);
-  };
-
-  const handlePetPhotoUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingPetPhoto(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/pets/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setPetForm((prev) => ({ ...prev, image_url: data.url }));
-    } catch (err) {
-      notify(err.message || "Photo upload failed", "error");
-    } finally {
-      setUploadingPetPhoto(false);
-    }
-  };
-
-  const handleSavePet = async (e) => {
-    e.preventDefault();
-    if (!petForm.name.trim()) {
-      notify("Pet name is required.", "error");
-      return;
-    }
-    setSavingPet(true);
-    try {
-      const interests = petForm.care_interests_text
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      const payload = {
-        name: petForm.name.trim(),
-        type: petForm.type,
-        breed: petForm.breed.trim(),
-        age: petForm.age.trim(),
-        image_url: petForm.image_url || null,
-        preferences: {
-          food_preference: petForm.food_preference.trim(),
-          care_interests: interests,
-        },
-      };
-
-      const url = editingPet ? `/api/pets/${editingPet.id}` : "/api/pets";
-      const method = editingPet ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not save pet");
-
-      setShowPetModal(false);
-      await fetchProfileAndPets();
-      notify(editingPet ? "Pet profile updated." : "Pet profile added!");
-    } catch (err) {
-      notify(err.message || "Error saving pet", "error");
-    } finally {
-      setSavingPet(false);
-    }
-  };
-
-  const handleDeletePet = async (petId) => {
-    if (!confirm("Remove this pet profile?")) return;
-    try {
-      const res = await fetch(`/api/pets/${petId}`, { method: "DELETE" });
-      if (res.ok) {
-        await fetchProfileAndPets();
-        notify("Pet profile removed.");
-      }
-    } catch (err) {
-      console.error("Delete pet error:", err);
-    }
-  };
-
-  const handleQuickAddToCart = async (product) => {
-    await addToCart(
-      {
-        id: product.id,
-        product_id: product.product_id || product.id,
-        variant_id: product.variant_id || null,
-        variant_name: product.variant_name || null,
-        name: product.name,
-        price: product.sale_price || product.price,
-        image_url: product.image_url,
-        stock_quantity: product.stock_quantity ?? 99,
-      },
-      1
-    );
-    notify(`${product.name} added to cart.`);
-  };
-
-  const handleSubscribeFromPantry = async (item, frequencyDays = 30) => {
-    try {
-      const res = await fetch("/api/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pet_id: item.pet_id || null,
-          product_id: item.product_id,
-          variant_id: item.variant_id || null,
-          variant_name: item.variant_name || null,
-          quantity: 1,
-          frequency_days: frequencyDays,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not create subscription");
-      await fetchProfileAndPets();
-      notify(`Subscribed to ${item.product_name} every ${frequencyDays} days (5% subscriber discount)!`);
-      setActiveTab("subscriptions");
-    } catch (err) {
-      notify(err.message || "Failed to subscribe", "error");
-    }
-  };
-
-  const handleSubscriptionAction = async (subId, action) => {
-    try {
-      const res = await fetch(`/api/subscriptions/${subId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Subscription update failed");
-      await fetchProfileAndPets();
-      notify(`Subscription ${action}d successfully.`);
-    } catch (err) {
-      notify(err.message || "Failed to update subscription", "error");
-    }
-  };
-
-  const handleAddHealthRecord = async (e) => {
-    e.preventDefault();
-    if (!healthForm.pet_id || !healthForm.title.trim()) {
-      notify("Select a pet and enter a title (e.g., Rabies Booster).", "error");
-      return;
-    }
-    setSavingHealth(true);
-    try {
-      const res = await fetch("/api/pets/health", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(healthForm),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save record");
-      setHealthForm({
-        pet_id: "",
-        record_type: "vaccination",
-        title: "",
-        record_date: "",
-        next_due_date: "",
-        clinic_name: "",
-        notes: "",
-      });
-      await fetchProfileAndPets();
-      notify("Health record saved to Pet Health Passport.");
-    } catch (err) {
-      notify(err.message || "Failed to add health record", "error");
-    } finally {
-      setSavingHealth(false);
-    }
-  };
-
-  const handleDeleteHealthRecord = async (recordId) => {
-    try {
-      const res = await fetch(`/api/pets/health?id=${recordId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to remove record");
-      await fetchProfileAndPets();
-      notify("Health record removed.");
-    } catch (err) {
-      notify(err.message || "Failed to remove record", "error");
-    }
-  };
-
-  const handleRemoveWishlist = async (item) => {
-    await toggleWishlist({ id: item.product_id });
-    setWishlistItems((prev) =>
-      prev.filter((w) => w.product_id !== item.product_id)
-    );
-    notify("Removed from wishlist.");
-  };
-
-  if (userLoading || loadingProfile) {
+  // 2. Timeout or hard error -> "Couldn't load, tap to retry"
+  if (loadError) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA]">
+      <div className="min-h-screen bg-[#FFFDF9]">
         <Header />
-        <div className="py-24 text-center text-xs font-bold text-gray-500">
-          Loading your Sri Usha account...
-        </div>
+        <main className="mx-auto max-w-md px-4 py-16 text-center">
+          <div className="rounded-3xl border border-red-200 bg-white p-7 shadow-xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600 border border-red-100">
+              <AlertCircle size={28} />
+            </div>
+            <h2 className="text-lg font-black text-[#4A0A0F]">
+              Couldn&apos;t load account
+            </h2>
+            <p className="mt-2 text-xs text-stone-500 leading-relaxed">
+              {loadError}
+            </p>
+            <button
+              type="button"
+              onClick={fetchAllAccountData}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#4A0A0F] px-6 py-3.5 text-xs font-bold text-white shadow-md hover:bg-[#360509] min-h-[44px] transition-transform active:scale-98"
+            >
+              <RotateCcw size={16} />
+              <span>Tap to retry</span>
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
 
-  const displayName = profile?.name || user?.name || "Customer";
-  const displayEmail = profile?.email || user?.email || "";
-  const userRole = profile?.role || user?.role || "customer";
+  // 3. Loading DB data -> Skeleton
+  if (loadingData) {
+    return <AccountSkeleton />;
+  }
 
-  const tabs = [
+  // Resolved user metadata
+  const displayName = profile?.name || clerkUser?.fullName || clerkUser?.firstName || "Customer";
+  const displayEmail = profile?.email || clerkUser?.primaryEmailAddress?.emailAddress || "";
+  const displayPhone = profile?.phone || "";
+  const userAvatar = profile?.image || clerkUser?.imageUrl || null;
+  const userRole = profile?.role || "customer";
+
+  const menuRows = [
     { id: "orders", label: "My Orders", icon: Package, count: orders.length },
+    { id: "addresses", label: "Saved Addresses", icon: MapPin, count: addresses.length },
     { id: "pets", label: "My Pets", icon: PawPrint, count: pets.length },
-    {
-      id: "pantry",
-      label: "Pet Pantry",
-      icon: Clock,
-      count: pantryItems.filter((p) => p.running_low).length || pantryItems.length,
-    },
-    {
-      id: "subscriptions",
-      label: "Subscriptions",
-      icon: RotateCcw,
-      count: subscriptions.filter((s) => s.status === "active").length,
-    },
-    { id: "rewards", label: "Pet Points", icon: Gift, count: rewardsData?.balance ?? 0 },
-    { id: "offers", label: "Offers", icon: Sparkles, count: activeOffers.length },
-    { id: "prescriptions", label: "Prescriptions", icon: FileText, count: prescriptions.length },
-    { id: "addresses", label: "Addresses", icon: MapPin, count: addresses.length },
     { id: "wishlist", label: "Wishlist", icon: Heart, count: wishlistItems.length },
-    { id: "profile", label: "My Profile", icon: User },
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] pb-16">
+    <div className="min-h-screen bg-[#FFFDF9] pb-24 overflow-x-hidden">
       <Header />
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 space-y-6">
+        {/* Toast Feedback */}
         {toast && (
           <div
-            className={`fixed bottom-5 right-5 z-50 rounded-xl px-4 py-3 text-xs font-bold shadow-lg border ${
+            className={`fixed bottom-20 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 z-50 rounded-2xl px-5 py-3 text-xs font-bold shadow-xl border flex items-center gap-2 animate-in fade-in duration-200 ${
               toast.type === "error"
                 ? "bg-rose-50 text-rose-800 border-rose-200"
                 : "bg-emerald-50 text-emerald-800 border-emerald-200"
             }`}
           >
-            {toast.msg}
+            {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+            <span>{toast.msg}</span>
           </div>
         )}
 
-        {/* Header Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-2xs">
-          <div className="flex items-center gap-3.5 sm:gap-4">
-            {user?.image ? (
-              <img
-                src={user.image}
-                alt={displayName}
-                className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl object-cover border-2 border-[#FED7AA] shadow-sm shrink-0"
-              />
-            ) : (
-              <div className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl bg-[#4A0A0F] text-xl sm:text-2xl font-black text-white shadow-sm shrink-0">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-2xl font-black text-stone-900">
-                  {displayName}
-                </h1>
-                <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#F97316]">
-                  {userRole.replace("_", " ")}
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-stone-500 mt-0.5">{displayEmail}</p>
-            </div>
-          </div>
+        {/* 1. Profile Card with Avatar, Name, Email, Editable Phone */}
+        <section className="rounded-3xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {userAvatar ? (
+                <img
+                  src={userAvatar}
+                  alt={displayName}
+                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-cover border-2 border-[#FED7AA] shadow-sm shrink-0"
+                />
+              ) : (
+                <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-[#4A0A0F] text-2xl font-black text-white shadow-sm shrink-0">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {userRole === "admin" && (
-              <a
-                href="/admin"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#360509] min-h-[44px]"
-              >
-                <Shield className="h-4 w-4" /> Admin Dashboard
-              </a>
-            )}
-            {userRole === "delivery_partner" && (
-              <a
-                href="/delivery"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#F97316] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#EA580C] min-h-[44px]"
-              >
-                <Truck className="h-4 w-4" /> Delivery Portal
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  if (typeof window !== "undefined" && window.Clerk?.signOut) {
-                    await window.Clerk.signOut();
-                  }
-                } catch {}
-                signOut({ callbackUrl: "/account/signin" });
-              }}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs sm:text-sm font-bold text-red-700 hover:bg-red-100 min-h-[44px] transition-colors"
-              aria-label="Sign out of account"
-            >
-              <LogOut className="h-4 w-4" /> Sign Out
-            </button>
-          </div>
-        </div>
-
-        {/* First-time Pet Onboarding Flow */}
-        {showOnboarding && (
-          <PetOnboardingFlow
-            onCompleted={async () => {
-              setShowOnboarding(false);
-              await fetchProfileAndPets();
-              setActiveTab("pets");
-            }}
-            onSkip={() => {
-              setShowOnboarding(false);
-              fetchProfileAndPets();
-            }}
-            onAddToCart={handleQuickAddToCart}
-          />
-        )}
-
-        {/* Personalized Recommendations Strip when customer has pets */}
-        {!showOnboarding && recommendations.length > 0 && (
-          <section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-2xs space-y-5">
-            {recommendations.slice(0, 2).map(({ pet, categories: matchedCats, products }) => (
-              <div key={pet.id} className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <div className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#F97316]">
-                      <Sparkles className="h-3 w-3" /> Tailored Pet Care
-                    </div>
-                    <h2 className="text-lg font-black text-gray-900">
-                      Recommended for {pet.name} {getPetEmoji(pet.type)}
-                    </h2>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {(matchedCats || []).slice(0, 3).map((cat) => (
-                      <a
-                        key={cat.id}
-                        href={`/products?category=${cat.slug}`}
-                        className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-bold text-gray-700 hover:border-[#F97316] hover:text-[#F97316]"
-                      >
-                        {cat.name} →
-                      </a>
-                    ))}
-                  </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg sm:text-xl font-black text-stone-900 truncate">
+                    {displayName}
+                  </h1>
+                  {userRole === "admin" && (
+                    <span className="rounded-full bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 uppercase tracking-wide">
+                      Admin
+                    </span>
+                  )}
                 </div>
 
-                {products.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {products.map((prod) => (
-                      <div
-                        key={prod.id}
-                        className="flex flex-col justify-between rounded-xl border border-gray-200 bg-[#F8F9FA] p-3"
-                      >
-                        <div>
-                          <a
-                            href={`/products/${prod.slug || prod.id}`}
-                            className="block aspect-square overflow-hidden rounded-lg bg-white mb-2.5"
-                          >
-                            {prod.image_url ? (
-                              <img
-                                src={prod.image_url}
-                                alt={prod.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-gray-300">
-                                <ShoppingBag className="h-6 w-6" />
-                              </div>
-                            )}
-                          </a>
-                          <p className="text-[10px] font-bold uppercase text-[#F97316]">
-                            {prod.category_name}
-                          </p>
-                          <a
-                            href={`/products/${prod.slug || prod.id}`}
-                            className="text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#F97316]"
-                          >
-                            {prod.name}
-                          </a>
-                        </div>
-                        <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-gray-200/70">
-                          <span className="text-xs font-black text-gray-900">
-                            ₹{Number(prod.sale_price || prod.price || 0).toFixed(0)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleQuickAddToCart(prod)}
-                            disabled={(prod.stock_quantity ?? 0) <= 0}
-                            className="rounded-lg bg-[#4A0A0F] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#360509] disabled:opacity-40"
-                          >
-                            {(prod.stock_quantity ?? 0) > 0 ? "Add" : "Sold Out"}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </section>
-        )}
+                <p className="text-xs text-stone-500 mt-0.5 truncate flex items-center gap-1.5">
+                  <Mail size={12} className="text-stone-400 shrink-0" />
+                  <span>{displayEmail}</span>
+                </p>
 
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
-          {tabs.map((tab) => {
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  <Phone size={12} className="text-stone-400 shrink-0" />
+                  {displayPhone ? (
+                    <span className="font-semibold text-stone-700">
+                      +91 {displayPhone}
+                    </span>
+                  ) : (
+                    <span className="text-stone-400 italic">No phone added</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditName(profile?.name || displayName);
+                  setEditPhone(profile?.phone || "");
+                  setShowEditProfileModal(true);
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-stone-300 bg-stone-50 px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-stone-100 min-h-[44px] transition-colors"
+              >
+                <Pencil size={14} />
+                <span>Edit Profile</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-700 hover:bg-red-100 min-h-[44px] transition-colors"
+                aria-label="Sign out"
+              >
+                <LogOut size={14} />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* 2. Menu Navigation Tabs (Mobile-Friendly Pill Bar) */}
+        <nav aria-label="Account Tabs" className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {menuRows.map((tab) => {
             const Icon = tab.icon;
-            const active = activeTab === tab.id;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
-                  active
-                    ? "bg-[#4A0A0F] text-white shadow-sm"
-                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-extrabold whitespace-nowrap min-h-[44px] transition-all shrink-0 ${
+                  isActive
+                    ? "bg-[#4A0A0F] text-white shadow-sm ring-2 ring-[#4A0A0F]/20"
+                    : "bg-white text-stone-700 border border-stone-200 hover:bg-stone-50"
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon size={16} />
                 <span>{tab.label}</span>
-                {typeof tab.count === "number" && (
+                {tab.count !== undefined && (
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
-                      active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                    className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-stone-100 text-stone-700"
                     }`}
                   >
                     {tab.count}
@@ -841,777 +617,326 @@ export default function CustomerAccountPage() {
               </button>
             );
           })}
-        </div>
+        </nav>
 
-        {/* Tab 1: My Orders */}
-        {activeTab === "orders" && (
-          <section className="space-y-4">
-            {loadingOrders ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-xs text-gray-500">
-                Loading your order history...
-              </div>
-            ) : orders.length === 0 ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
-                <Package className="mx-auto h-10 w-10 text-gray-300 mb-3" />
-                <h3 className="text-sm font-extrabold text-gray-900">
-                  No orders yet
-                </h3>
-                <p className="mt-1 text-xs text-gray-500">
-                  Start shopping for veterinary care, nutrition, and pet essentials.
-                </p>
-                <a
-                  href="/products"
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509]"
-                >
-                  Browse Store
-                </a>
-              </div>
-            ) : (
-              orders.map((order) => (
-                <div
-                  key={order.id}
-                  className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 pb-3.5">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-black text-gray-900">
-                          {order.order_number || `SU-${order.id}`}
-                        </span>
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold capitalize ${
-                            STATUS_BADGE[order.status] ||
-                            "bg-gray-50 text-gray-700 border-gray-200"
-                          }`}
-                        >
-                          {(order.status || "placed").replace(/_/g, " ")}
-                        </span>
-                        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-gray-700">
-                          {order.payment_method} • {order.payment_status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Placed on{" "}
-                        {new Date(order.created_at).toLocaleDateString("en-IN", {
-                          dateStyle: "medium",
-                        })}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="text-[11px] text-gray-500">Order Total</p>
-                        <p className="text-base font-black text-gray-900">
-                          ₹{Number(order.total_amount || 0).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {Array.isArray(order.items) && order.items.length > 0 && (
-                    <div className="mt-3.5 space-y-2">
-                      {order.items.map((item, idx) => (
-                        <div
-                          key={item.id || idx}
-                          className="flex items-center justify-between text-xs text-gray-700"
-                        >
-                          <span className="font-semibold">
-                            {item.product_name || item.name} × {item.quantity}
-                          </span>
-                          <span className="font-bold text-gray-900">
-                            ₹
-                            {Number(
-                              item.subtotal || item.price * item.quantity || 0
-                            ).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
-                    <button
-                      type="button"
-                      onClick={() => handleReorder(order)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" /> Buy Again
-                    </button>
-                    <a
-                      href={`/receipt/${order.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                    >
-                      <FileText className="h-3.5 w-3.5" /> Receipt
-                    </a>
-                    <a
-                      href={`/orders/${order.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#360509]"
-                    >
-                      <Truck className="h-3.5 w-3.5" /> Track Order
-                    </a>
-                  </div>
-                </div>
-              ))
-            )}
-          </section>
-        )}
-
-        {/* Tab 2: My Pets */}
-        {activeTab === "pets" && (
-          <section className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-black text-gray-900">
-                  My Pet Profiles
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Manage your pets to keep recommendations and care preferences accurate
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {!showOnboarding && (
-                  <button
-                    type="button"
-                    onClick={() => setShowOnboarding(true)}
-                    className="rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                  >
-                    Guided Setup
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={openAddPetModal}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2 text-xs font-bold text-white hover:bg-[#360509]"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Pet
-                </button>
-              </div>
-            </div>
-
-            {loadingPets ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-xs text-gray-500">
-                Loading your pets...
-              </div>
-            ) : pets.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
-                <PawPrint className="mx-auto h-10 w-10 text-gray-300 mb-3" />
-                <h3 className="text-sm font-extrabold text-gray-900">
-                  No pet profiles added yet
-                </h3>
-                <p className="mt-1 text-xs text-gray-500">
-                  Add your dog, cat, bird, or small pet for tailored product suggestions.
-                </p>
-                <button
-                  type="button"
-                  onClick={openAddPetModal}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509]"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Your First Pet
-                </button>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {pets.map((pet) => (
-                  <div
-                    key={pet.id}
-                    className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          {pet.image_url ? (
-                            <img
-                              src={pet.image_url}
-                              alt={pet.name}
-                              className="h-14 w-14 rounded-2xl object-cover border border-gray-200"
-                            />
-                          ) : (
-                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl border border-amber-100">
-                              {getPetEmoji(pet.type)}
-                            </div>
-                          )}
-                          <div>
-                            <h3 className="text-base font-black text-gray-900">
-                              {pet.name}
-                            </h3>
-                            <p className="text-xs font-semibold text-gray-600 capitalize">
-                              {pet.type}
-                              {pet.breed ? ` • ${pet.breed}` : ""}
-                            </p>
-                            {pet.age && (
-                              <p className="text-[11px] text-gray-500">
-                                Age: {pet.age}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 space-y-1.5 text-xs text-gray-600">
-                        {pet.preferences?.food_preference && (
-                          <p>
-                            <span className="font-bold text-gray-800">Food:</span>{" "}
-                            {pet.preferences.food_preference}
-                          </p>
-                        )}
-                        {Array.isArray(pet.preferences?.care_interests) &&
-                          pet.preferences.care_interests.length > 0 && (
-                            <div className="flex flex-wrap gap-1 pt-1">
-                              {pet.preferences.care_interests.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="rounded-full bg-[#FFF7ED] px-2.5 py-0.5 text-[10px] font-bold text-[#F97316]"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
-                      <button
-                        type="button"
-                        onClick={() => openEditPetModal(pet)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                      >
-                        <Pencil className="h-3 w-3" /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeletePet(pet.id)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
-                      >
-                        <Trash2 className="h-3 w-3" /> Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Pet Health Passport (Records & Reminders Only) */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-100 pb-3">
-                <div>
-                  <h3 className="text-base font-black text-gray-900">
-                    🩺 Pet Health Passport (Records &amp; Reminders)
-                  </h3>
-                  <p className="text-[11px] text-gray-500">
-                    Record-keeping &amp; vaccination/deworming due-date reminders only — consult a veterinarian for medical advice.
-                  </p>
-                </div>
-              </div>
-
-              {pets.length > 0 && (
-                <form onSubmit={handleAddHealthRecord} className="grid grid-cols-1 sm:grid-cols-6 gap-2.5 bg-gray-50 p-3.5 rounded-xl border border-gray-100">
-                  <select
-                    value={healthForm.pet_id}
-                    onChange={(e) => setHealthForm((f) => ({ ...f, pet_id: e.target.value }))}
-                    required
-                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold"
-                  >
-                    <option value="">Select Pet *</option>
-                    {pets.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.type || "Pet"})
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={healthForm.record_type}
-                    onChange={(e) => setHealthForm((f) => ({ ...f, record_type: e.target.value }))}
-                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold"
-                  >
-                    <option value="vaccination">Vaccination</option>
-                    <option value="deworming">Deworming</option>
-                    <option value="vet_visit">Vet Visit</option>
-                    <option value="grooming">Grooming / Checkup</option>
-                  </select>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Title (e.g. Rabies Booster)"
-                    value={healthForm.title}
-                    onChange={(e) => setHealthForm((f) => ({ ...f, title: e.target.value }))}
-                    className="sm:col-span-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
-                  />
-                  <input
-                    type="date"
-                    title="Next Due Date"
-                    value={healthForm.next_due_date}
-                    onChange={(e) => setHealthForm((f) => ({ ...f, next_due_date: e.target.value }))}
-                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={savingHealth}
-                    className="rounded-lg bg-[#4A0A0F] px-3 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-50"
-                  >
-                    {savingHealth ? "Saving..." : "+ Add Record"}
-                  </button>
-                </form>
-              )}
-
-              {healthRecords.length === 0 ? (
-                <p className="text-xs text-gray-500">
-                  No health records logged yet. Add vaccinations, deworming dates, or vet visits above to receive due-date reminders.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {healthRecords.map((rec) => (
-                    <div
-                      key={rec.id}
-                      className="flex items-start justify-between rounded-xl border border-gray-200 bg-[#F8F9FA] p-3.5"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2 py-0.5 text-[10px] font-bold uppercase text-[#F97316]">
-                            {rec.record_type.replace("_", " ")}
-                          </span>
-                          <span className="text-xs font-black text-gray-900">
-                            {rec.pet_name}: {rec.title}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-gray-600 flex flex-wrap gap-3">
-                          {rec.next_due_date && (
-                            <span
-                              className={`font-bold ${
-                                rec.days_until_due !== null && rec.days_until_due <= 14
-                                  ? "text-amber-700"
-                                  : "text-gray-700"
-                              }`}
-                            >
-                              Next due: {new Date(rec.next_due_date).toLocaleDateString("en-IN", { dateStyle: "medium" })}
-                              {rec.days_until_due !== null &&
-                                (rec.days_until_due < 0
-                                  ? ` (${Math.abs(rec.days_until_due)}d overdue)`
-                                  : rec.days_until_due === 0
-                                  ? " (Due today)"
-                                  : ` (in ${rec.days_until_due}d)`)}
-                            </span>
-                          )}
-                          {rec.clinic_name && <span>Clinic: {rec.clinic_name}</span>}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteHealthRecord(rec.id)}
-                        className="text-gray-400 hover:text-rose-600 p-1"
-                        title="Remove record"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Tab: Pet Pantry (Smart Consumption Predictor) */}
-        {activeTab === "pantry" && (
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
-                <Package size={20} strokeWidth={1.75} className="text-[#F97316]" />
-                <span>Smart Pet Pantry</span>
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Calculates estimated pack consumption from your real order history and pet weight so you never run out of essentials.
-              </p>
-            </div>
-            {pantryItems.length === 0 ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
-                <Clock className="mx-auto h-9 w-9 text-gray-300 mb-2" />
-                <p className="text-sm font-bold text-gray-700">No Pantry Predictions Yet</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Once you place an order for food, treats, or essentials, your Pet Pantry will track usage automatically.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {pantryItems.map((item) => (
-                  <div
-                    key={`${item.product_id}-${item.variant_id || 0}`}
-                    className={`rounded-2xl border bg-white p-5 shadow-2xs space-y-3 ${
-                      item.running_low ? "border-amber-300 bg-amber-50/30" : "border-gray-200"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        {item.image_url && (
-                          <img
-                            src={item.image_url}
-                            alt={item.product_name}
-                            className="h-12 w-12 rounded-xl object-contain bg-gray-50 border border-gray-100"
-                          />
-                        )}
-                        <div>
-                          <h3 className="text-sm font-black text-gray-900">{item.product_name}</h3>
-                          <p className="text-[11px] text-gray-500">
-                            {item.variant_name || "Standard Pack"} • Last ordered {item.days_since_order ?? 0}d ago
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
-                          item.running_low
-                            ? "bg-amber-100 text-amber-800 border border-amber-200"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        }`}
-                      >
-                        {item.percent_consumed}% Used
-                      </span>
-                    </div>
-
-                    <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          item.running_low ? "bg-amber-500" : "bg-[#F97316]"
-                        }`}
-                        style={{ width: `${Math.min(100, item.percent_consumed)}%` }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-gray-600">
-                      <span>
-                        {item.pet_name ? `${item.pet_name}'s ~${item.estimated_cycle_days}d cycle` : `Est. ~${item.estimated_cycle_days}d pack`}
-                      </span>
-                      <span className="font-bold text-gray-900">
-                        {item.estimated_days_remaining > 0 ? `~${item.estimated_days_remaining} days left` : "Likely finished"}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleQuickAddToCart({
-                            id: item.product_id,
-                            product_id: item.product_id,
-                            variant_id: item.variant_id,
-                            variant_name: item.variant_name,
-                            name: item.product_name,
-                            price: item.price,
-                            image_url: item.image_url,
-                          })
-                        }
-                        className="rounded-xl bg-[#4A0A0F] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#360509]"
-                      >
-                        1-Tap Reorder (₹{Number(item.price || 0).toFixed(0)})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSubscribeFromPantry(item, 30)}
-                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
-                      >
-                        Subscribe 30d (5% Off)
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Tab: Pet Subscriptions */}
-        {activeTab === "subscriptions" && (
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
-                <RotateCcw size={20} strokeWidth={1.75} className="text-[#F97316]" />
-                <span>Flexible Pet Subscriptions</span>
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                5% subscriber savings on recurring pet food &amp; essentials. Skip, pause, or cancel in one tap anytime.
-              </p>
-            </div>
-            {subscriptions.length === 0 ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
-                <RotateCcw className="mx-auto h-9 w-9 text-gray-300 mb-2" />
-                <p className="text-sm font-bold text-gray-700">No Active Subscriptions</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Start a 30, 60, or 90-day subscription from your Pet Pantry tab to save 5% automatically.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {subscriptions.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      {sub.image_url && (
-                        <img
-                          src={sub.image_url}
-                          alt={sub.product_name}
-                          className="h-14 w-14 rounded-xl object-contain bg-gray-50 border border-gray-100"
-                        />
-                      )}
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm font-black text-gray-900">{sub.product_name}</h3>
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                              sub.status === "active"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : sub.status === "paused"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {sub.status}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {sub.variant_name || "Standard"} • Every {sub.frequency_days} days • {sub.discount_percent}% Off
-                          {sub.pet_name ? ` • For ${sub.pet_name}` : ""}
-                        </p>
-                        {sub.next_delivery_date && sub.status !== "cancelled" && (
-                          <p className="text-xs font-bold text-[#4A0A0F] mt-1">
-                            Next Delivery: {new Date(sub.next_delivery_date).toLocaleDateString("en-IN", { dateStyle: "medium" })}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {sub.status !== "cancelled" && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSubscriptionAction(sub.id, "skip")}
-                          className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100"
-                        >
-                          Skip Next (+{sub.frequency_days}d)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSubscriptionAction(sub.id, sub.status === "active" ? "pause" : "resume")
-                          }
-                          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
-                        >
-                          {sub.status === "active" ? "Pause" : "Resume"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSubscriptionAction(sub.id, "cancel")}
-                          className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Tab 3: Saved Addresses */}
+        {/* 3. TAB CONTENT: SAVED ADDRESSES (Amazon-style) */}
         {activeTab === "addresses" && (
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-gray-900">
-                  Saved Delivery Addresses
+                <h2 className="text-base font-black text-stone-900">
+                  Saved Addresses
                 </h2>
-                <p className="text-xs text-gray-500">
-                  Manage addresses for faster checkout
+                <p className="text-xs text-stone-500">
+                  Manage delivery locations for quick 1-click checkout
                 </p>
               </div>
+
               <button
                 type="button"
-                onClick={() => setShowAddAddress(!showAddAddress)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2 text-xs font-bold text-white hover:bg-[#360509]"
+                onClick={openAddAddressModal}
+                className="inline-flex items-center gap-1.5 rounded-2xl bg-[#4A0A0F] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#360509] min-h-[44px] transition-transform active:scale-95"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Address
+                <Plus size={16} />
+                <span>Add Address</span>
               </button>
             </div>
 
-            {showAddAddress && (
-              <form
-                onSubmit={handleAddAddress}
-                className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs space-y-4"
-              >
-                <h3 className="text-sm font-extrabold text-gray-900">
-                  New Delivery Address
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-gray-700">
-                      Recipient / Address Label *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newAddress.name}
-                      onChange={(e) =>
-                        setNewAddress({ ...newAddress, name: e.target.value })
-                      }
-                      placeholder="e.g., Home - Vipul"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
-                    />
+            {/* Address Cards Grid */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Empty state: Amazon dashed card */}
+              {addresses.length === 0 && (
+                <button
+                  type="button"
+                  onClick={openAddAddressModal}
+                  className="sm:col-span-2 rounded-3xl border-2 border-dashed border-stone-300 bg-white/60 p-8 text-center hover:border-[#F97316] hover:bg-[#FFF7ED]/30 transition-all min-h-[160px] flex flex-col items-center justify-center gap-2"
+                >
+                  <div className="h-12 w-12 rounded-2xl bg-amber-50 border border-amber-200 text-[#F97316] flex items-center justify-center">
+                    <Plus size={24} />
                   </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-gray-700">
-                      Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={newAddress.phone}
-                      onChange={(e) =>
-                        setNewAddress({ ...newAddress, phone: e.target.value })
-                      }
-                      placeholder="10-digit mobile number"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="mb-1 block text-xs font-bold text-gray-700">
-                      Street Address / Flat &amp; Landmark *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newAddress.address_line}
-                      onChange={(e) =>
-                        setNewAddress({
-                          ...newAddress,
-                          address_line: e.target.value,
-                        })
-                      }
-                      placeholder="House No, Street, Area"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-gray-700">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newAddress.city}
-                      onChange={(e) =>
-                        setNewAddress({ ...newAddress, city: e.target.value })
-                      }
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold text-gray-700">
-                      Pincode *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newAddress.pincode}
-                      onChange={(e) =>
-                        setNewAddress({
-                          ...newAddress,
-                          pincode: e.target.value,
-                        })
-                      }
-                      placeholder="e.g., 500001"
-                      className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-xs outline-none focus:border-[#F97316]"
-                    />
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={newAddress.is_default}
-                    onChange={(e) =>
-                      setNewAddress({
-                        ...newAddress,
-                        is_default: e.target.checked,
-                      })
-                    }
-                  />
-                  Set as default delivery address
-                </label>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddAddress(false)}
-                    className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingAddress}
-                    className="rounded-xl bg-[#4A0A0F] px-5 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
-                  >
-                    {savingAddress ? "Saving..." : "Save Address"}
-                  </button>
-                </div>
-              </form>
-            )}
+                  <span className="text-sm font-bold text-stone-900">
+                    Add your first delivery address
+                  </span>
+                  <span className="text-xs text-stone-500">
+                    Save your Hyderabad home or office for fast same-day delivery
+                  </span>
+                </button>
+              )}
 
-            {loadingAddresses ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-xs text-gray-500">
-                Loading saved addresses...
-              </div>
-            ) : addresses.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-xs text-gray-500">
-                No saved addresses yet. Add one above for faster checkout.
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {addresses.map((addr) => (
+              {addresses.map((addr) => {
+                const isDefault = Boolean(addr.is_default);
+                const label = addr.label || "Home";
+
+                return (
                   <div
                     key={addr.id}
-                    className={`rounded-2xl border bg-white p-5 shadow-2xs flex flex-col justify-between ${
-                      addr.is_default ? "border-[#4A0A0F]" : "border-gray-200"
+                    className={`rounded-3xl border bg-white p-5 shadow-xs flex flex-col justify-between transition-all ${
+                      isDefault
+                        ? "border-[#4A0A0F] ring-2 ring-[#4A0A0F]/15"
+                        : "border-stone-200 hover:border-stone-300"
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-sm font-black text-gray-900">
-                          {addr.name}
-                        </span>
-                        {addr.is_default && (
-                          <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2.5 py-0.5 text-[10px] font-extrabold text-[#F97316]">
-                            Default
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-xl bg-stone-100 px-2.5 py-1 text-[11px] font-black uppercase text-stone-700">
+                            {label === "Home" ? (
+                              <Home size={12} />
+                            ) : label === "Work" ? (
+                              <Briefcase size={12} />
+                            ) : (
+                              <Building2 size={12} />
+                            )}
+                            <span>{label}</span>
                           </span>
+
+                          {isDefault && (
+                            <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800">
+                              <Check size={11} strokeWidth={3} />
+                              <span>Default</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {!isDefault && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetDefaultAddress(addr.id)}
+                            className="text-[11px] font-bold text-[#F97316] hover:underline min-h-[32px] px-2 flex items-center"
+                          >
+                            Set as default
+                          </button>
                         )}
                       </div>
-                      <p className="text-xs text-gray-700">
-                        {addr.address_line}
+
+                      {/* Recipient Details */}
+                      <h3 className="text-sm font-black text-stone-900">
+                        {addr.name}
+                      </h3>
+                      <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                        {addr.house_no ? `${addr.house_no}, ` : ""}
+                        {addr.street_area || addr.address_line}
                       </p>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        {addr.city}, {addr.state} - {addr.pincode}
+                      {addr.landmark && (
+                        <p className="text-xs text-stone-500 mt-0.5 italic">
+                          Landmark: Near {addr.landmark}
+                        </p>
+                      )}
+                      <p className="text-xs font-semibold text-stone-700 mt-1">
+                        {addr.city || "Hyderabad"}, {addr.state || "Telangana"} -{" "}
+                        <span className="font-mono font-bold">{addr.pincode}</span>
                       </p>
-                      <p className="text-xs font-semibold text-gray-500 mt-1">
-                        Phone: {addr.phone}
+                      <p className="text-xs text-stone-600 mt-2 font-medium flex items-center gap-1">
+                        <Phone size={12} className="text-stone-400" />
+                        <span>Phone: {addr.phone}</span>
                       </p>
                     </div>
-                    <div className="mt-4 flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
-                      {!addr.is_default && (
-                        <button
-                          type="button"
-                          onClick={() => handleSetDefaultAddress(addr.id)}
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                        >
-                          Set Default
-                        </button>
-                      )}
+
+                    {/* Action Buttons */}
+                    <div className="mt-5 pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditAddressModal(addr)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-bold text-stone-700 hover:bg-stone-100 min-h-[44px]"
+                      >
+                        <Pencil size={13} />
+                        <span>Edit</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleDeleteAddress(addr.id)}
-                        className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                        className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100 min-h-[44px]"
                       >
-                        Delete
+                        <Trash2 size={13} />
+                        <span>Delete</span>
                       </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* 4. TAB CONTENT: MY ORDERS */}
+        {activeTab === "orders" && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-black text-stone-900">Order History</h2>
+                <p className="text-xs text-stone-500">Track and reorder veterinary supplies</p>
+              </div>
+            </div>
+
+            {orders.length === 0 ? (
+              <div className="rounded-3xl border border-stone-200 bg-white p-10 text-center space-y-3">
+                <Package size={36} className="mx-auto text-stone-300" />
+                <h3 className="text-sm font-bold text-stone-900">No orders placed yet</h3>
+                <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                  Your order history and live delivery tracking will appear here.
+                </p>
+                <a
+                  href="/products"
+                  className="inline-flex items-center justify-center rounded-2xl bg-[#4A0A0F] px-6 py-3 text-xs font-bold text-white shadow-xs hover:bg-[#360509] min-h-[44px]"
+                >
+                  Start Shopping
+                </a>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.map((ord) => {
+                  const statusClass =
+                    STATUS_BADGE[ord.status] || "bg-stone-50 text-stone-700 border-stone-200";
+
+                  return (
+                    <div
+                      key={ord.id}
+                      className="rounded-3xl border border-stone-200 bg-white p-5 shadow-xs space-y-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-extrabold text-stone-900">
+                              {ord.order_number}
+                            </span>
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${statusClass}`}
+                            >
+                              {(ord.status || "confirmed").replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-stone-400 mt-0.5">
+                            Placed on {new Date(ord.created_at).toLocaleDateString("en-IN", { dateStyle: "medium" })}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-sm font-black text-stone-900">
+                            ₹{Number(ord.total_amount || 0).toFixed(0)}
+                          </div>
+                          <span className="text-[10px] font-bold text-stone-500 uppercase">
+                            COD Order
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Items */}
+                      <div className="space-y-2">
+                        {(ord.items || []).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2.5">
+                              {item.image_url && (
+                                <img
+                                  src={item.image_url}
+                                  alt={item.product_name || "Product"}
+                                  className="h-10 w-10 object-contain rounded-xl border border-stone-100 bg-stone-50 p-0.5"
+                                />
+                              )}
+                              <div>
+                                <span className="font-bold text-stone-800">
+                                  {item.product_name || item.name}
+                                </span>
+                                {item.variant_name && (
+                                  <span className="ml-1 text-[11px] text-stone-500">
+                                    ({item.variant_name})
+                                  </span>
+                                )}
+                                <div className="text-[11px] text-stone-400">
+                                  Qty: {item.quantity} × ₹{item.unit_price || item.price}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="font-bold text-stone-900">
+                              ₹{(Number(item.quantity || 1) * Number(item.unit_price || item.price || 0)).toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="pt-2 flex items-center justify-between border-t border-stone-100">
+                        <a
+                          href={`/orders/${ord.id}`}
+                          className="text-xs font-bold text-[#F97316] hover:underline flex items-center gap-1 min-h-[44px]"
+                        >
+                          <span>Track Order</span>
+                          <ChevronRight size={14} />
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => handleReorder(ord)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-stone-100 px-4 py-2 text-xs font-bold text-stone-800 hover:bg-stone-200 min-h-[44px]"
+                        >
+                          <RotateCcw size={13} />
+                          <span>Reorder All</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 5. TAB CONTENT: MY PETS */}
+        {activeTab === "pets" && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-black text-stone-900">My Pets</h2>
+                <p className="text-xs text-stone-500">Pet profiles &amp; personalized diets</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingPet(null);
+                  setPetForm({ name: "", type: "dog", breed: "", age: "", food_preference: "" });
+                  setShowPetModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-2xl bg-[#4A0A0F] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#360509] min-h-[44px]"
+              >
+                <Plus size={16} />
+                <span>Add Pet</span>
+              </button>
+            </div>
+
+            {pets.length === 0 ? (
+              <div className="rounded-3xl border border-stone-200 bg-white p-10 text-center space-y-3">
+                <PawPrint size={36} className="mx-auto text-stone-300" />
+                <h3 className="text-sm font-bold text-stone-900">No pet profiles saved</h3>
+                <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                  Add your dogs, cats or birds to receive personalized food recommendations and health reminders.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {pets.map((pet) => (
+                  <div
+                    key={pet.id}
+                    className="rounded-3xl border border-stone-200 bg-white p-5 shadow-xs flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-2xl border border-amber-200">
+                        {getPetEmoji(pet.type)}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-stone-900">
+                          {pet.name}
+                        </h4>
+                        <p className="text-xs text-stone-500 capitalize">
+                          {pet.type} {pet.breed ? `• ${pet.breed}` : ""} {pet.age ? `• ${pet.age}` : ""}
+                        </p>
+                        {pet.preferences?.food_preference && (
+                          <p className="text-[11px] text-[#F97316] font-semibold mt-0.5">
+                            Diet: {pet.preferences.food_preference}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1620,90 +945,71 @@ export default function CustomerAccountPage() {
           </section>
         )}
 
-        {/* Tab 4: Wishlist */}
+        {/* 6. TAB CONTENT: WISHLIST */}
         {activeTab === "wishlist" && (
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-gray-900">
-                Saved Wishlist
-              </h2>
-              <a
-                href="/products"
-                className="text-xs font-bold text-[#4A0A0F] hover:text-[#F97316] hover:underline"
-              >
-                Explore Products →
-              </a>
+              <div>
+                <h2 className="text-base font-black text-stone-900">My Wishlist</h2>
+                <p className="text-xs text-stone-500">Saved essentials for upcoming orders</p>
+              </div>
             </div>
 
-            {loadingWishlist ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-xs text-gray-500">
-                Loading wishlist...
-              </div>
-            ) : wishlistItems.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-xs text-gray-500">
-                Your wishlist is empty. Tap the heart icon on any product to save it here.
+            {wishlistItems.length === 0 ? (
+              <div className="rounded-3xl border border-stone-200 bg-white p-10 text-center space-y-3">
+                <Heart size={36} className="mx-auto text-stone-300" />
+                <h3 className="text-sm font-bold text-stone-900">Your wishlist is empty</h3>
+                <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                  Tap the heart icon on any product to save it here for later.
+                </p>
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {wishlistItems.map((item) => (
                   <div
-                    key={item.id || item.product_id}
-                    className="flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-2xs"
+                    key={item.id}
+                    className="rounded-3xl border border-stone-200 bg-white p-3.5 shadow-xs flex flex-col justify-between"
                   >
                     <div>
-                      <a
-                        href={`/products/${item.slug || item.product_id}`}
-                        className="block aspect-square overflow-hidden rounded-xl bg-gray-50 mb-3"
-                      >
-                        {item.image_url ? (
-                          <img
-                            src={item.image_url}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-gray-300">
-                            <ShoppingBag className="h-8 w-8" />
-                          </div>
-                        )}
-                      </a>
-                      <p className="text-[10px] font-bold uppercase text-[#F97316]">
-                        {item.category_name}
-                      </p>
-                      <a
-                        href={`/products/${item.slug || item.product_id}`}
-                        className="mt-0.5 block text-xs font-extrabold text-gray-900 line-clamp-2 hover:text-[#F97316]"
-                      >
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="h-28 w-full object-contain rounded-2xl mb-2"
+                      />
+                      <h4 className="text-xs font-bold text-stone-900 line-clamp-2">
                         {item.name}
-                      </a>
-                      <p className="mt-1.5 text-sm font-black text-gray-900">
-                        ₹{Number(item.sale_price || item.price || 0).toFixed(0)}
+                      </h4>
+                      <p className="text-xs font-black text-[#4A0A0F] mt-1">
+                        ₹{item.price}
                       </p>
                     </div>
 
-                    <div className="mt-3 flex items-center gap-2 pt-3 border-t border-gray-100">
+                    <div className="mt-3 flex gap-2">
                       <button
                         type="button"
                         onClick={() =>
-                          handleQuickAddToCart({
-                            id: item.product_id,
+                          addToCart({
+                            id: item.id,
                             name: item.name,
-                            price: item.sale_price || item.price,
+                            price: item.price,
                             image_url: item.image_url,
-                            stock_quantity: item.stock_quantity,
+                            stock_quantity: item.stock_quantity || 99,
                           })
                         }
-                        className="flex-1 rounded-xl bg-[#4A0A0F] py-2 text-xs font-bold text-white hover:bg-[#360509]"
+                        className="flex-1 rounded-xl bg-[#4A0A0F] py-2 text-[11px] font-bold text-white min-h-[44px]"
                       >
                         Add to Cart
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleRemoveWishlist(item)}
-                        className="rounded-xl border border-gray-200 p-2 text-rose-600 hover:bg-rose-50"
-                        title="Remove from wishlist"
+                        onClick={async () => {
+                          await toggleWishlist({ id: item.id });
+                          setWishlistItems((prev) => prev.filter((w) => w.id !== item.id));
+                        }}
+                        className="rounded-xl border border-stone-200 p-2 text-stone-500 hover:text-red-600 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        aria-label="Remove from wishlist"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
@@ -1712,478 +1018,304 @@ export default function CustomerAccountPage() {
             )}
           </section>
         )}
+      </main>
 
-        {/* Tab: Sri Usha Rewards */}
-        {activeTab === "rewards" && (
-          <section className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-2xs">
-                <p className="text-xs font-bold text-gray-500 uppercase">Available Points</p>
-                <p className="text-3xl font-black text-[#27AE60] mt-1">
-                  {rewardsData?.balance ?? 0}
-                </p>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  1 pt = ₹{rewardsData?.config?.pointValueInr ?? 1}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-                <p className="text-xs font-bold text-gray-500 uppercase">Total Points Earned</p>
-                <p className="text-3xl font-black text-gray-900 mt-1">
-                  {rewardsData?.lifetimePoints ?? 0}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-                <p className="text-xs font-bold text-gray-500 uppercase">Points Redeemed</p>
-                <p className="text-3xl font-black text-[#4A0A0F] mt-1">
-                  {rewardsData?.redeemedPoints ?? 0}
-                </p>
-              </div>
+      {/* MODAL 1: EDIT PROFILE */}
+      {showEditProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-stone-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
+              <h3 className="text-base font-black text-stone-900">Edit Profile</h3>
+              <button
+                type="button"
+                onClick={() => setShowEditProfileModal(false)}
+                className="h-9 w-9 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            {rewardsData?.config?.campaignName && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-xs font-semibold text-amber-900">
-                Active Campaign: <strong>{rewardsData.config.campaignName}</strong> (
-                {rewardsData.config.campaignMultiplier}x earning • Earn{" "}
-                {rewardsData.config.pointsPer100} pts per ₹100 on delivered orders)
-              </div>
-            )}
-
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h3 className="text-sm font-extrabold text-gray-900 mb-3">Reward History</h3>
-              {!rewardsData?.transactions?.length ? (
-                <p className="text-xs text-gray-500">
-                  Complete your first order to start earning Sri Usha Rewards!
-                </p>
-              ) : (
-                <div className="divide-y divide-gray-100 text-xs">
-                  {rewardsData.transactions.map((tx) => (
-                    <div key={tx.id} className="py-2.5 flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-gray-800">{tx.description}</p>
-                        <p className="text-[11px] text-gray-400">
-                          {new Date(tx.created_at).toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                      <span
-                        className={`font-black ${
-                          tx.points >= 0 ? "text-emerald-600" : "text-rose-600"
-                        }`}
-                      >
-                        {tx.points >= 0 ? `+${tx.points}` : tx.points} pts
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Tab: Active Offers */}
-        {activeTab === "offers" && (
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h2 className="text-base font-black text-gray-900 mb-3">
-                Available Offers &amp; Promo Codes
-              </h2>
-              {activeOffers.length === 0 ? (
-                <p className="text-xs text-gray-500">
-                  No active promo codes right now. Check back soon for festival specials!
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {activeOffers.map((offer) => (
-                    <div
-                      key={offer.id}
-                      className="rounded-2xl border border-dashed border-[#FED7AA] bg-[#FFF7ED] p-4 flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        <span className="inline-block rounded-lg bg-[#4A0A0F] px-2.5 py-1 font-black text-white tracking-wider">
-                          {offer.code}
-                        </span>
-                        <p className="font-bold text-gray-900 mt-1.5">{offer.title}</p>
-                        <p className="text-gray-600 mt-0.5">
-                          {offer.discount_type === "percentage"
-                            ? `${offer.discount_value}% OFF`
-                            : `₹${offer.discount_value} OFF`}
-                          {Number(offer.min_order_amount) > 0
-                            ? ` on orders above ₹${offer.min_order_amount}`
-                            : ""}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (typeof navigator !== "undefined" && navigator.clipboard) {
-                            navigator.clipboard.writeText(offer.code);
-                            setToast(`Copied ${offer.code}! Apply it in Cart or Checkout.`);
-                            setTimeout(() => setToast(null), 2500);
-                          }
-                        }}
-                        className="rounded-xl border border-[#4A0A0F] bg-white px-3 py-1.5 font-bold text-[#4A0A0F] hover:bg-[#FFF7ED] shrink-0"
-                      >
-                        Copy Code
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Tab: Prescriptions */}
-        {activeTab === "prescriptions" && (
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-2xs">
-              <h2 className="text-base font-black text-gray-900 mb-3">
-                Uploaded Veterinary Prescriptions
-              </h2>
-              {prescriptions.length === 0 ? (
-                <p className="text-xs text-gray-500">
-                  No prescriptions uploaded yet. When you order prescription medicines, you can upload your vet Rx during checkout.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {prescriptions.map((rx) => (
-                    <div
-                      key={rx.id}
-                      className="rounded-xl border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900">{rx.original_filename}</span>
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                              rx.status === "approved"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : rx.status === "rejected"
-                                ? "bg-rose-50 text-rose-700"
-                                : "bg-amber-50 text-amber-700"
-                            }`}
-                          >
-                            {rx.status}
-                          </span>
-                        </div>
-                        <p className="text-gray-500 mt-1">
-                          Uploaded {new Date(rx.created_at).toLocaleString("en-IN")}
-                          {rx.order_number ? ` • Order ${rx.order_number}` : ""}
-                        </p>
-                        {rx.notes && <p className="text-gray-600 mt-1">Note: {rx.notes}</p>}
-                      </div>
-                      <a
-                        href={`/api/prescriptions/${rx.id}/file`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-bold text-[#4A0A0F] hover:text-[#F97316] hover:underline"
-                      >
-                        View File
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Tab 5: My Profile */}
-        {activeTab === "profile" && (
-          <section className="grid gap-6 md:grid-cols-2">
-            <form
-              onSubmit={handleSaveProfile}
-              className="rounded-2xl border border-gray-200 bg-white p-6 shadow-2xs space-y-4"
-            >
-              <h2 className="text-base font-black text-gray-900">
-                Customer Details
-              </h2>
+            <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-bold text-gray-700">
-                  Display Name
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  Full Name *
                 </label>
                 <input
                   type="text"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#F97316]"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="e.g. Ramesh Kumar"
+                  className="w-full rounded-2xl border border-stone-300 px-4 py-3 text-xs sm:text-sm outline-none focus:border-[#F97316]"
                 />
               </div>
+
               <div>
-                <label className="mb-1 block text-xs font-bold text-gray-700">
-                  Verified Email Address
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  Mobile Number (10 digits)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value.replace(/\D/g, ""))}
+                    placeholder="9876543210"
+                    className="w-full rounded-2xl border border-stone-300 pl-12 pr-4 py-3 text-xs sm:text-sm outline-none focus:border-[#F97316]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  Email Address
                 </label>
                 <input
                   type="email"
-                  value={displayEmail}
                   disabled
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-500"
+                  value={displayEmail}
+                  className="w-full rounded-2xl border border-stone-200 bg-stone-100 px-4 py-3 text-xs sm:text-sm text-stone-500 font-medium cursor-not-allowed"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-bold text-gray-700">
-                  Account Role (Neon Verified)
-                </label>
-                <p className="rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-xs font-bold uppercase text-gray-700">
-                  {userRole}
-                </p>
-              </div>
-              <button
-                type="submit"
-                disabled={savingProfile}
-                className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
-              >
-                {savingProfile ? "Saving..." : "Save Profile Name"}
-              </button>
-            </form>
-
-            {/* Innovative Pet Passport & VIP Pet Care Hub */}
-            <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/60 via-orange-50/40 to-white p-6 shadow-2xs flex flex-col justify-between space-y-5">
-              <div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <PawPrint size={20} strokeWidth={1.75} className="text-[#4A0A0F]" />
-                    <h2 className="text-base font-black text-gray-900">
-                      Sri Usha Pet Passport
-                    </h2>
-                  </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800 tracking-wide">
-                    <Zap size={10} className="fill-emerald-800 text-emerald-800" />
-                    <span>Fast Pass</span>
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-gray-600 leading-relaxed">
-                  Your personalized pet health, nutrition schedule, and quick-delivery preferences.
-                </p>
-
-                {/* Pet Quick Glance */}
-                <div className="mt-4 rounded-xl border border-amber-200/60 bg-white/90 p-3.5">
-                  <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="font-bold text-gray-700">Registered Fur Babies</span>
-                    <span className="font-black text-[#EA580C]">{pets.length} Pet{pets.length === 1 ? "" : "s"}</span>
-                  </div>
-                  {pets.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {pets.map((p) => (
-                        <div
-                          key={p.id}
-                          className="flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200/80 px-2.5 py-1 text-xs font-bold text-gray-800"
-                        >
-                          <span>{p.type === "cat" ? <Cat size={13} className="text-[#D97706]" strokeWidth={1.75} /> : p.type === "bird" ? <Bird size={13} className="text-[#B45309]" strokeWidth={1.75} /> : <Dog size={13} className="text-[#F97316]" strokeWidth={1.75} />}</span>
-                          <span>{p.name}</span>
-                          <span className="text-[10px] font-normal text-gray-500">
-                            ({p.breed || p.type})
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500">
-                      No pets linked yet. Add your pet to unlock auto-diet predictions and vaccine alerts!
-                    </p>
-                  )}
-                </div>
-
-                {/* Hyperlocal Vet Helpline */}
-                <div className="mt-3 flex items-center justify-between rounded-xl bg-[#FFF7ED] border border-[#FED7AA] p-3 text-xs">
-                  <div>
-                    <p className="font-bold text-[#4A0A0F]">Sri Usha Vet &amp; Pet Helpline</p>
-                    <p className="text-[11px] text-stone-600 font-medium">Uppal, Hyderabad • Store Assistance</p>
-                  </div>
-                  <a
-                    href={telUrl}
-                    className="rounded-lg bg-[#4A0A0F] px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-[#360509]"
-                  >
-                    Call Vet
-                  </a>
-                </div>
+                <span className="text-[10px] text-stone-400 mt-1 block">
+                  Email is verified through Clerk account authentication.
+                </span>
               </div>
 
-              {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-100">
+              <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingPet(null);
-                    setPetFormData({
-                      name: "",
-                      type: "dog",
-                      breed: "",
-                      age: "",
-                      weight: "",
-                      allergies: "",
-                      dietary_preferences: "",
-                      medical_history: "",
-                      image_url: "",
-                    });
-                    setShowPetModal(true);
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#EA580C] px-3 py-2.5 text-xs font-bold text-white hover:bg-[#D94E07] shadow-xs transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Add New Pet</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("pets")}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs font-bold text-gray-800 hover:bg-gray-50 shadow-xs transition-colors"
-                >
-                  <Heart className="h-3.5 w-3.5 text-rose-500" />
-                  <span>View Pet Hub</span>
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-      </main>
-
-      {/* Add / Edit Pet Modal */}
-      {showPetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-gray-200">
-            <h3 className="text-lg font-black text-gray-900 mb-4">
-              {editingPet ? `Edit ${editingPet.name}` : "Add New Pet Profile"}
-            </h3>
-
-            <form onSubmit={handleSavePet} className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
-                    Pet Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={petForm.name}
-                    onChange={(e) =>
-                      setPetForm({ ...petForm, name: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
-                    Type *
-                  </label>
-                  <select
-                    value={petForm.type}
-                    onChange={(e) =>
-                      setPetForm({ ...petForm, type: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
-                  >
-                    <option value="dog">Dog</option>
-                    <option value="cat">Cat</option>
-                    <option value="bird">Bird</option>
-                    <option value="other">Other Pet</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
-                    Age
-                  </label>
-                  <input
-                    type="text"
-                    value={petForm.age}
-                    onChange={(e) =>
-                      setPetForm({ ...petForm, age: e.target.value })
-                    }
-                    placeholder="e.g., 2 years"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
-                    Breed (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={petForm.breed}
-                    onChange={(e) =>
-                      setPetForm({ ...petForm, breed: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
-                    Food Preference
-                  </label>
-                  <input
-                    type="text"
-                    value={petForm.food_preference}
-                    onChange={(e) =>
-                      setPetForm({
-                        ...petForm,
-                        food_preference: e.target.value,
-                      })
-                    }
-                    placeholder="e.g., Dry Kibble, Grain-Free"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-bold text-gray-700">
-                    Care Interests (comma-separated)
-                  </label>
-                  <input
-                    type="text"
-                    value={petForm.care_interests_text}
-                    onChange={(e) =>
-                      setPetForm({
-                        ...petForm,
-                        care_interests_text: e.target.value,
-                      })
-                    }
-                    placeholder="e.g., Nutrition, Grooming, Supplements"
-                    className="w-full rounded-xl border border-gray-200 px-3.5 py-2 text-sm outline-none focus:border-[#F97316]"
-                  />
-                </div>
-                <div className="sm:col-span-2 flex items-center gap-3">
-                  {petForm.image_url ? (
-                    <img
-                      src={petForm.image_url}
-                      alt="Pet"
-                      className="h-12 w-12 rounded-xl object-cover border border-gray-200"
-                    />
-                  ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-lg">
-                      {getPetEmoji(petForm.type)}
-                    </div>
-                  )}
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">
-                    {uploadingPetPhoto ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Upload className="h-3.5 w-3.5" />
-                    )}
-                    <span>
-                      {uploadingPetPhoto ? "Uploading..." : "Upload Pet Photo"}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePetPhotoUpload}
-                      className="hidden"
-                      disabled={uploadingPetPhoto}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPetModal(false)}
-                  className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                  onClick={() => setShowEditProfileModal(false)}
+                  className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs font-bold text-stone-700 hover:bg-stone-100 min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={savingPet}
-                  className="rounded-xl bg-[#4A0A0F] px-5 py-2 text-xs font-bold text-white hover:bg-[#360509] disabled:opacity-60"
+                  disabled={savingProfile}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#4A0A0F] px-6 py-3 text-xs font-bold text-white hover:bg-[#360509] min-h-[44px] disabled:opacity-60"
                 >
-                  {savingPet ? "Saving..." : editingPet ? "Save Changes" : "Add Pet"}
+                  {savingProfile ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Changes</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ADD / EDIT ADDRESS (Amazon-style) */}
+      {showAddressModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-stone-100 my-8 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
+              <h3 className="text-base font-black text-stone-900">
+                {editingAddressId ? "Edit Delivery Address" : "Add Delivery Address"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddressModal(false)}
+                className="h-9 w-9 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAddress} className="space-y-3.5">
+              {/* Full Name & Phone */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={addressForm.name}
+                    onChange={(e) => setAddressForm({ ...addressForm, name: e.target.value })}
+                    placeholder="Recipient's Name"
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-2.5 text-xs outline-none focus:border-[#F97316]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    10-digit Mobile Number *
+                  </label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    required
+                    value={addressForm.phone}
+                    onChange={(e) =>
+                      setAddressForm({
+                        ...addressForm,
+                        phone: e.target.value.replace(/\D/g, ""),
+                      })
+                    }
+                    placeholder="9876543210"
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-2.5 text-xs outline-none focus:border-[#F97316]"
+                  />
+                </div>
+              </div>
+
+              {/* Flat/House No */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  Flat, House no., Building, Company, Apartment *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={addressForm.house_no}
+                  onChange={(e) => setAddressForm({ ...addressForm, house_no: e.target.value })}
+                  placeholder="e.g. Flat 402, Sri Sai Nilayam"
+                  className="w-full rounded-2xl border border-stone-300 px-4 py-2.5 text-xs outline-none focus:border-[#F97316]"
+                />
+              </div>
+
+              {/* Street/Area */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  Area, Street, Sector, Village *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={addressForm.street_area}
+                  onChange={(e) => setAddressForm({ ...addressForm, street_area: e.target.value })}
+                  placeholder="e.g. Raghavendra Nagar, Uppal"
+                  className="w-full rounded-2xl border border-stone-300 px-4 py-2.5 text-xs outline-none focus:border-[#F97316]"
+                />
+              </div>
+
+              {/* Landmark */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">
+                  Landmark (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={addressForm.landmark}
+                  onChange={(e) => setAddressForm({ ...addressForm, landmark: e.target.value })}
+                  placeholder="e.g. Near Metro Pillar 84 / Behind Apollo Pharmacy"
+                  className="w-full rounded-2xl border border-stone-300 px-4 py-2.5 text-xs outline-none focus:border-[#F97316]"
+                />
+              </div>
+
+              {/* City, State, Pincode */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">City</label>
+                  <input
+                    type="text"
+                    disabled
+                    value="Hyderabad"
+                    className="w-full rounded-2xl border border-stone-200 bg-stone-100 px-3 py-2.5 text-xs font-bold text-stone-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">State</label>
+                  <input
+                    type="text"
+                    disabled
+                    value="Telangana"
+                    className="w-full rounded-2xl border border-stone-200 bg-stone-100 px-3 py-2.5 text-xs font-bold text-stone-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Pincode *</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    value={addressForm.pincode}
+                    onChange={(e) =>
+                      setAddressForm({
+                        ...addressForm,
+                        pincode: e.target.value.replace(/\D/g, ""),
+                      })
+                    }
+                    placeholder="500039"
+                    className="w-full rounded-2xl border border-stone-300 px-3 py-2.5 text-xs font-mono outline-none focus:border-[#F97316]"
+                  />
+                </div>
+              </div>
+
+              {/* Address Label (Home / Work / Other) */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  Address Type / Label
+                </label>
+                <div className="flex gap-2">
+                  {["Home", "Work", "Other"].map((lbl) => (
+                    <button
+                      key={lbl}
+                      type="button"
+                      onClick={() => setAddressForm({ ...addressForm, label: lbl })}
+                      className={`flex-1 rounded-2xl py-2.5 text-xs font-bold border min-h-[44px] transition-colors ${
+                        addressForm.label === lbl
+                          ? "bg-[#FFF7ED] border-[#4A0A0F] text-[#4A0A0F] ring-1 ring-[#4A0A0F]"
+                          : "bg-white border-stone-200 text-stone-700 hover:bg-stone-50"
+                      }`}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Set as Default Checkbox */}
+              <div className="pt-1">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addressForm.is_default || addresses.length === 0}
+                    disabled={addresses.length === 0}
+                    onChange={(e) =>
+                      setAddressForm({ ...addressForm, is_default: e.target.checked })
+                    }
+                    className="h-4 w-4 rounded accent-[#4A0A0F]"
+                  />
+                  <span className="text-xs font-semibold text-stone-700">
+                    Make this my default delivery address
+                  </span>
+                </label>
+              </div>
+
+              {/* Modal Buttons */}
+              <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddressModal(false)}
+                  className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-stone-100 min-h-[44px]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAddress}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#4A0A0F] px-6 py-2.5 text-xs font-bold text-white hover:bg-[#360509] min-h-[44px] disabled:opacity-60"
+                >
+                  {savingAddress ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>{editingAddressId ? "Save Changes" : "Save Address"}</span>
+                  )}
                 </button>
               </div>
             </form>

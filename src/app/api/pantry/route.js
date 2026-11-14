@@ -1,9 +1,9 @@
 import { requireUser } from "@/app/api/utils/security";
 import { getCustomerPetPantry } from "@/utils/petPantryService";
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const authResult = await requireUser();
+    const authResult = await requireUser(request);
     if (authResult.error) {
       return Response.json({ error: authResult.error }, { status: authResult.status });
     }

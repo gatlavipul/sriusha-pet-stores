@@ -17,7 +17,7 @@ const PRIVATE_RX_DIR = path.join(process.cwd(), "private_uploads", "prescription
 
 export async function GET(request) {
   try {
-    const authResult = await requireUser();
+    const authResult = await requireUser(request);
     if (authResult.error) {
       return Response.json({ error: authResult.error }, { status: authResult.status });
     }
@@ -72,7 +72,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const authResult = await requireUser();
+    const authResult = await requireUser(request);
     if (authResult.error) {
       return Response.json({ error: authResult.error }, { status: authResult.status });
     }

@@ -1,6 +1,6 @@
 import sql from "@/app/api/utils/sql";
 import { auth } from "@/auth";
-import { validateEmail, validatePhone, sanitizeText } from "@/app/api/utils/security";
+import { requireUser, validateEmail, validatePhone, sanitizeText } from "@/app/api/utils/security";
 import { ORDER_STATUS } from "@/utils/orderWorkflow";
 import { checkServiceability } from "@/utils/serviceabilityService";
 import {
@@ -17,16 +17,16 @@ import { commitPointRedemption } from "@/utils/loyaltyService";
 import { rateLimiter, getClientIp } from "@/utils/rateLimiter";
 import logger from "@/utils/logger";
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const authResult = await requireUser(request);
+    if (authResult.error || !authResult.user) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const orders = await sql`
       SELECT * FROM orders 
-      WHERE user_id = ${session.user.id}
+      WHERE user_id = ${authResult.user.id}
       ORDER BY created_at DESC
     `;
 
@@ -67,7 +67,8 @@ export async function POST(request) {
       );
     }
 
-    const session = await auth();
+    const authResult = await requireUser(request).catch(() => null);
+    const session = authResult?.session || (await auth().catch(() => null));
     const body = await request.json();
 
     const {
