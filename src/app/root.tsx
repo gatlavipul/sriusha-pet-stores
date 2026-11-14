@@ -564,9 +564,11 @@ export function Layout({ children }: { children: ReactNode }) {
         {!clerkPublishableKey ? (
           <div
             role="alert"
-            className="bg-amber-600 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[100] shadow-md flex items-center justify-center gap-2"
+            className="w-full max-w-full overflow-hidden bg-amber-600 text-white text-xs font-semibold py-2 px-3 text-center sticky top-0 z-[100] shadow-md"
           >
-            <span>⚠️ Clerk Authentication Warning: Publishable key is missing. Please set <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> in Netlify environment variables.</span>
+            <p className="break-words max-w-md mx-auto leading-relaxed">
+              ⚠️ <strong>Clerk Auth:</strong> Please set <code className="bg-amber-700/80 px-1 py-0.5 rounded text-[11px] break-all">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> in Netlify environment variables.
+            </p>
           </div>
         ) : null}
         <ClientOnly loader={() => children} />

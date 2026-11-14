@@ -31,18 +31,8 @@ export default function SignUpPage() {
   }, [isLoaded, isSignedIn]);
 
   return (
-    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#241819] flex flex-col items-center justify-center px-4 py-8 select-none">
-      {/* Background warm aesthetic glows */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed -top-24 -right-24 h-96 w-96 rounded-full bg-orange-100/50 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed -bottom-24 -left-24 h-96 w-96 rounded-full bg-amber-100/50 blur-3xl"
-      />
-
-      <div className="relative z-10 w-full max-w-[340px] sm:max-w-md mx-auto flex flex-col items-center">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#FAF7F2] text-[#241819] flex flex-col items-center justify-center px-3 py-6 select-none box-border">
+      <div className="relative z-10 w-full max-w-[340px] sm:max-w-md mx-auto flex flex-col items-center box-border">
         {/* Brand Logo & Title */}
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="h-16 w-16 rounded-2xl bg-white shadow-md border border-[#EADBCC] flex items-center justify-center p-2 mb-3">
