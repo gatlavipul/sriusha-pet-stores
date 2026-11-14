@@ -14,6 +14,7 @@ import {
   Heart,
   AlertCircle,
   Clock,
+  RotateCcw,
 } from "lucide-react";
 
 export default function ProductsPage() {
@@ -26,6 +27,7 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState("featured");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [addedIds, setAddedIds] = useState({});
 
   // Sync with URL parameters on mount
@@ -47,20 +49,31 @@ export default function ProductsPage() {
       .catch(console.error);
   }, []);
 
-  // Fetch products
-  useEffect(() => {
+  const fetchProducts = () => {
     setLoading(true);
+    setFetchError(false);
     const params = new URLSearchParams();
     if (selectedCategory) params.append("category", selectedCategory);
     if (searchQuery) params.append("search", searchQuery);
 
     fetch(`/api/products?${params.toString()}`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch products");
+        return res.json();
+      })
       .then((data) => {
         setProducts(data.products || []);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setFetchError(true);
+        setLoading(false);
+      });
+  };
+
+  // Fetch products
+  useEffect(() => {
+    fetchProducts();
   }, [selectedCategory, searchQuery]);
 
   // Extract unique brands for brand filter
@@ -258,18 +271,33 @@ export default function ProductsPage() {
 
         {/* Product Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-gray-200 bg-white p-4 animate-pulse"
+                className="rounded-2xl border border-gray-200 bg-white p-3 sm:p-4 animate-pulse"
               >
-                <div className="aspect-square rounded-xl bg-gray-200 mb-4" />
-                <div className="h-4 w-20 rounded bg-gray-200 mb-2" />
-                <div className="h-5 w-3/4 rounded bg-gray-200 mb-3" />
-                <div className="h-6 w-1/3 rounded bg-gray-200" />
+                <div className="aspect-square rounded-xl bg-gray-200 mb-3" />
+                <div className="h-3 w-16 rounded bg-gray-200 mb-2" />
+                <div className="h-4 w-3/4 rounded bg-gray-200 mb-3" />
+                <div className="h-5 w-1/3 rounded bg-gray-200" />
               </div>
             ))}
+          </div>
+        ) : fetchError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center my-6">
+            <AlertCircle className="mx-auto h-8 w-8 text-red-500 mb-2" />
+            <p className="text-sm font-bold text-red-800">
+              Something went wrong, tap to retry
+            </p>
+            <button
+              type="button"
+              onClick={fetchProducts}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#360509] transition-all min-h-[44px]"
+            >
+              <RotateCcw size={14} />
+              <span>Tap to retry</span>
+            </button>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-xs">
@@ -282,13 +310,13 @@ export default function ProductsPage() {
             </p>
             <button
               onClick={handleClearFilters}
-              className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#360509]"
+              className="rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#360509] min-h-[44px]"
             >
               Reset Filters
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}

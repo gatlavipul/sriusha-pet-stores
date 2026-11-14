@@ -375,7 +375,7 @@ export default function Header() {
               <button
                 type="button"
                 onClick={() => setSearchOpen(!searchOpen)}
-                className="lg:hidden p-2 text-stone-700 hover:text-[#F97316] rounded-full hover:bg-[#FAF7F2] transition-colors"
+                className="lg:hidden p-2 text-stone-700 hover:text-[#F97316] rounded-full hover:bg-[#FAF7F2] transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"
                 aria-label="Search pet products"
               >
                 <Search size={19} strokeWidth={1.75} />
@@ -384,7 +384,7 @@ export default function Header() {
               {/* Desktop Wishlist (Outline by default, filled on /wishlist, badge when count > 0) */}
               <a
                 href="/wishlist"
-                className="hidden sm:inline-flex relative p-2 text-stone-700 hover:text-rose-600 rounded-full hover:bg-[#FAF7F2] transition-colors shrink-0"
+                className="hidden sm:inline-flex relative p-2 text-stone-700 hover:text-rose-600 rounded-full hover:bg-[#FAF7F2] transition-colors shrink-0 min-h-[44px] min-w-[44px] items-center justify-center"
                 title="Wishlist"
                 aria-label="Wishlist"
               >
@@ -394,7 +394,7 @@ export default function Header() {
                   className={isWishlistPage ? "text-rose-500 fill-rose-500" : "text-stone-700"}
                 />
                 {wishlistCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-xs">
+                  <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-xs">
                     {wishlistCount}
                   </span>
                 )}
@@ -403,7 +403,7 @@ export default function Header() {
               {/* Desktop Orders Icon */}
               <a
                 href="/orders"
-                className="hidden sm:inline-flex p-2 text-stone-700 hover:text-[#4A0A0F] rounded-full hover:bg-[#FAF7F2] transition-colors shrink-0"
+                className="hidden sm:inline-flex p-2 text-stone-700 hover:text-[#4A0A0F] rounded-full hover:bg-[#FAF7F2] transition-colors shrink-0 min-h-[44px] min-w-[44px] items-center justify-center"
                 title="My Orders"
                 aria-label="My Orders"
               >
@@ -413,7 +413,7 @@ export default function Header() {
               {/* Cart Button with Real Item Badge */}
               <a
                 href="/cart"
-                className="relative inline-flex items-center gap-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3EDE2] border border-[#EADBCC] px-2.5 py-1.5 sm:px-3 sm:py-1.5 text-xs font-bold text-[#4A0A0F] transition-colors shrink-0"
+                className="relative inline-flex items-center gap-1.5 rounded-xl bg-[#FAF7F2] hover:bg-[#F3EDE2] border border-[#EADBCC] px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-bold text-[#4A0A0F] transition-colors shrink-0 min-h-[44px]"
                 aria-label={`View Cart, ${totalCount} items`}
               >
                 <ShoppingCart size={18} strokeWidth={1.75} className="text-[#4A0A0F]" />
@@ -424,46 +424,6 @@ export default function Header() {
                   </span>
                 )}
               </a>
-
-              {/* Mobile Sign In / Profile Direct Button */}
-              <div className="sm:hidden flex items-center shrink-0">
-                {user ? (
-                  <a
-                    href="/account"
-                    className="flex items-center p-1 rounded-full border border-[#EADBCC] hover:border-[#F97316] transition-colors"
-                    aria-label="My Account"
-                  >
-                    {user.image ? (
-                      <img
-                        src={user.image}
-                        alt={user.name || "User"}
-                        className="h-6 w-6 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4A0A0F] text-[10px] font-black text-white">
-                        {(user.name || user.email || "U")[0].toUpperCase()}
-                      </div>
-                    )}
-                  </a>
-                ) : (
-                  <a
-                    href="/account/signin"
-                    className="rounded-full border border-[#4A0A0F] text-[#4A0A0F] hover:bg-[#4A0A0F] hover:text-white px-2.5 py-1 text-xs font-bold transition-colors shrink-0"
-                  >
-                    Sign In
-                  </a>
-                )}
-              </div>
-
-              {/* Mobile Hamburger Menu Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                className="lg:hidden p-1.5 text-stone-700 hover:text-[#F97316] rounded-full hover:bg-[#FAF7F2] transition-colors shrink-0"
-                aria-label="Open mobile navigation menu"
-              >
-                <Menu size={20} strokeWidth={1.75} />
-              </button>
 
               {/* User Account / Profile Menu (Desktop & Tablet) */}
               <div className="hidden sm:block">

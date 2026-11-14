@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { Home, Search, PawPrint, ShoppingCart, User, LogIn } from "lucide-react";
+import { Home, Search, PawPrint, ShoppingCart, User } from "lucide-react";
 import useCart from "@/utils/useCart";
 import useUser from "@/utils/useUser";
 
 export default function MobileBottomNav() {
   const { totalCount } = useCart();
-  const { data: user, loading } = useUser();
+  const { data: user } = useUser();
   const [currentPath, setCurrentPath] = useState("/");
 
   useEffect(() => {
@@ -14,31 +14,18 @@ export default function MobileBottomNav() {
     }
   }, []);
 
-  // NEVER render customer bottom nav on admin or delivery partner portals
+  // NEVER render customer bottom nav on admin, delivery portals, or auth pages
   if (
     currentPath.startsWith("/admin") ||
-    currentPath.startsWith("/delivery")
+    currentPath.startsWith("/delivery") ||
+    currentPath.startsWith("/account/signin") ||
+    currentPath.startsWith("/account/signup")
   ) {
     return null;
   }
 
-  const handleAccountClick = (e) => {
-    if (!user && !loading) {
-      // If window.Clerk has openSignIn, open the Clerk modal immediately on screen
-      if (typeof window !== "undefined" && window.Clerk && typeof window.Clerk.openSignIn === "function") {
-        e.preventDefault();
-        window.Clerk.openSignIn({
-          fallbackRedirectUrl: "/account",
-          signUpUrl: "/account/signup",
-        });
-        return;
-      }
-      // Otherwise native navigation to /account/signin will occur via href
-    }
-  };
-
   // Exactly 5 navigation items as specified in Phase 2 & Brand guidelines:
-  // Home, Search (Browse), PawPrint (My Pets), ShoppingCart (Cart), Account / Sign In
+  // Home, Search (Browse), PawPrint (My Pets), ShoppingCart (Cart), Account
   const navItems = [
     { label: "Home", href: "/", icon: Home },
     { label: "Browse", href: "/products", icon: Search },
@@ -51,21 +38,20 @@ export default function MobileBottomNav() {
       badgeColor: "bg-[#F97316]",
     },
     {
-      label: user ? "Account" : "Sign In",
-      href: user ? "/account" : "/account/signin?callbackUrl=/account",
-      icon: user ? User : LogIn,
+      label: "Account",
+      href: "/account",
+      icon: User,
       isAccount: true,
-      onClick: handleAccountClick,
     },
   ];
 
   return (
     <nav
       aria-label="Mobile bottom navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FFFDF9]/95 backdrop-blur-md border-t border-[#EADBCC] shadow-[0_-4px_12px_rgba(74,10,15,0.05)]"
-      style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 6px)" }}
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FFFDF9]/95 backdrop-blur-md border-t border-[#EADBCC] shadow-[0_-4px_16px_rgba(74,10,15,0.06)]"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)" }}
     >
-      <div className="flex items-center justify-around h-14 px-1">
+      <div className="flex items-center justify-around h-14 px-1 max-w-lg mx-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
@@ -77,8 +63,7 @@ export default function MobileBottomNav() {
             <a
               key={item.label}
               href={item.href}
-              onClick={item.onClick}
-              className={`flex flex-col items-center justify-center flex-1 py-1 relative transition-colors ${
+              className={`flex flex-col items-center justify-center flex-1 py-1 min-h-[44px] relative transition-colors select-none ${
                 isActive
                   ? "text-[#4A0A0F] font-bold"
                   : "text-stone-500 hover:text-stone-800"
@@ -115,12 +100,15 @@ export default function MobileBottomNav() {
                 )}
               </div>
               <span
-                className={`text-[10px] mt-1 tracking-tight leading-none ${
-                  isActive ? "font-black text-[#4A0A0F]" : "font-medium"
+                className={`text-[10px] tracking-tight mt-0.5 line-clamp-1 ${
+                  isActive ? "font-bold text-[#4A0A0F]" : "font-medium text-stone-500"
                 }`}
               >
                 {item.label}
               </span>
+              {isActive && (
+                <span className="absolute bottom-0 w-8 h-0.5 rounded-full bg-[#4A0A0F]" />
+              )}
             </a>
           );
         })}

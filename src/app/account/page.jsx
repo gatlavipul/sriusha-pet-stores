@@ -650,21 +650,29 @@ export default function CustomerAccountPage() {
         )}
 
         {/* Header Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4A0A0F] text-xl font-black text-white shadow-sm">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-2xs">
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            {user?.image ? (
+              <img
+                src={user.image}
+                alt={displayName}
+                className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl object-cover border-2 border-[#FED7AA] shadow-sm shrink-0"
+              />
+            ) : (
+              <div className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl bg-[#4A0A0F] text-xl sm:text-2xl font-black text-white shadow-sm shrink-0">
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-stone-900">
+                <h1 className="text-lg sm:text-2xl font-black text-stone-900">
                   {displayName}
                 </h1>
                 <span className="rounded-full bg-[#FFF7ED] border border-[#FED7AA] px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#F97316]">
                   {userRole.replace("_", " ")}
                 </span>
               </div>
-              <p className="text-xs text-stone-500 mt-0.5">{displayEmail}</p>
+              <p className="text-xs sm:text-sm text-stone-500 mt-0.5">{displayEmail}</p>
             </div>
           </div>
 
@@ -672,25 +680,33 @@ export default function CustomerAccountPage() {
             {userRole === "admin" && (
               <a
                 href="/admin"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2 text-xs font-bold text-white hover:bg-[#360509]"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#360509] min-h-[44px]"
               >
-                <Shield className="h-3.5 w-3.5" /> Admin Dashboard
+                <Shield className="h-4 w-4" /> Admin Dashboard
               </a>
             )}
             {userRole === "delivery_partner" && (
               <a
                 href="/delivery"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#F97316] px-4 py-2 text-xs font-bold text-white hover:bg-[#EA580C]"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#F97316] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#EA580C] min-h-[44px]"
               >
-                <Truck className="h-3.5 w-3.5" /> Delivery Portal
+                <Truck className="h-4 w-4" /> Delivery Portal
               </a>
             )}
             <button
               type="button"
-              onClick={() => signOut()}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
+              onClick={async () => {
+                try {
+                  if (typeof window !== "undefined" && window.Clerk?.signOut) {
+                    await window.Clerk.signOut();
+                  }
+                } catch {}
+                signOut({ callbackUrl: "/account/signin" });
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs sm:text-sm font-bold text-red-700 hover:bg-red-100 min-h-[44px] transition-colors"
+              aria-label="Sign out of account"
             >
-              <LogOut className="h-3.5 w-3.5" /> Sign Out
+              <LogOut className="h-4 w-4" /> Sign Out
             </button>
           </div>
         </div>

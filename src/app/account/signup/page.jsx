@@ -1,36 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useSession } from "@auth/create/react";
-import { SignUp } from "@clerk/clerk-react";
-import {
-  ShieldCheck,
-  ExternalLink,
-  ArrowLeft,
-  Lock,
-  Zap,
-  Package,
-  Heart,
-  MapPin,
-  CheckCircle2,
-} from "lucide-react";
-import { getLocalCart, setLocalCart } from "@/utils/useCart";
-
-function getSafeCallback(raw) {
-  if (!raw || typeof raw !== "string") return "/account";
-  const url = raw.trim();
-  if (
-    !url.startsWith("/") ||
-    url.startsWith("//") ||
-    url.includes("\\") ||
-    url.includes(":") ||
-    url.startsWith("/account/signup") ||
-    url.startsWith("/account/signin") ||
-    url.startsWith("/admin") ||
-    url.startsWith("/delivery")
-  ) {
-    return "/account";
-  }
-  return url;
-}
+import { useState, useEffect } from "react";
+import { SignUp, useUser } from "@clerk/clerk-react";
+import { AlertCircle, PawPrint, ShieldCheck } from "lucide-react";
 
 function getClerkPublishableKey() {
   return (
@@ -47,500 +17,104 @@ function getClerkPublishableKey() {
   );
 }
 
-function getClerkHostedDomain() {
-  try {
-    const pk = getClerkPublishableKey();
-    if (!pk.startsWith("pk_")) return null;
-    const raw = pk.replace(/^pk_(test|live)_/, "");
-    const decoded = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
-    const domain = decoded.endsWith("$") ? decoded.slice(0, -1) : decoded;
-    return domain.includes(".") ? domain : null;
-  } catch {
-    return null;
-  }
-}
-
-function isClerkLoaded() {
-  return Boolean(
-    typeof window !== "undefined" &&
-      window.Clerk &&
-      (window.Clerk.loaded || window.Clerk.status === "ready")
-  );
-}
-
 export default function SignUpPage() {
-  const { data: session, status } = useSession();
-  const [callbackUrl, setCallbackUrl] = useState("");
-  const [clerkLoaded, setClerkLoaded] = useState(false);
-  const [redirecting, setRedirecting] = useState(false);
-  const [mountFallback, setMountFallback] = useState(false);
-  const clerkMountRef = useRef(null);
-  const isRedirectingRef = useRef(false);
-  const isMountedWidgetRef = useRef(false);
+  const { isLoaded, isSignedIn } = useUser();
+  const publishableKey = getClerkPublishableKey();
 
-  const hostedDomain = getClerkHostedDomain();
-  const returnToOrigin =
-    typeof window !== "undefined" ? `${window.location.origin}/account` : "";
-  const hostedSignUpUrl = hostedDomain
-    ? `https://${hostedDomain}/sign-up${returnToOrigin ? `?redirect_url=${encodeURIComponent(returnToOrigin)}` : ""}`
-    : null;
-
+  // If already signed in, go straight to home
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setCallbackUrl(params.get("callbackUrl") || "");
+    if (isLoaded && isSignedIn) {
+      if (typeof window !== "undefined") {
+        window.location.replace("/");
+      }
     }
-  }, []);
-
-  const signInHref = callbackUrl
-    ? `/account/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`
-    : "/account/signin";
-
-  const handlePostSignupRedirect = useCallback(async () => {
-    if (isRedirectingRef.current) return;
-    isRedirectingRef.current = true;
-    setRedirecting(true);
-
-    try {
-      const headers = {};
-      if (typeof window !== "undefined" && window.Clerk?.session) {
-        try {
-          const token = await window.Clerk.session.getToken();
-          if (token) {
-            headers["Authorization"] = `Bearer ${token}`;
-          }
-        } catch {
-          // fallback
-        }
-      }
-
-      // Sync customer profile into Neon PostgreSQL (strictly defaults to role = 'customer')
-      try {
-        await fetch("/api/account/me", { headers });
-      } catch (e) {
-        console.warn("Customer sync during signup warning:", e);
-      }
-
-      // Merge ONLY unmerged guest items once and update localStorage cleanly
-      const localItems = getLocalCart();
-      const guestItems = localItems.filter(
-        (i) => typeof i.id === "string" && i.id.startsWith("local_")
-      );
-      if (guestItems.length > 0) {
-        try {
-          const mergeRes = await fetch("/api/cart/merge", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...headers,
-            },
-            body: JSON.stringify({ items: guestItems }),
-          });
-          if (mergeRes.ok) {
-            const mergeData = await mergeRes.json();
-            if (mergeData.success && Array.isArray(mergeData.cartItems)) {
-              const merged = mergeData.cartItems.map((ci) => ({
-                id: ci.id,
-                product_id: ci.product_id,
-                name: ci.name,
-                price: parseFloat(ci.price || 0),
-                image_url: ci.image_url,
-                quantity: ci.quantity,
-                stock_quantity: ci.stock_quantity ?? 99,
-              }));
-              setLocalCart(merged);
-            }
-          }
-        } catch (e) {
-          console.warn("Cart merge during signup warning:", e);
-        }
-      }
-
-      const params = new URLSearchParams(window.location.search);
-      const rawCallback = params.get("callbackUrl");
-      window.location.href = getSafeCallback(rawCallback);
-    } catch (e) {
-      console.error("Signup redirect error:", e);
-      window.location.href = "/account";
-    }
-  }, []);
-
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (status === "authenticated" && session) {
-      handlePostSignupRedirect();
-    }
-  }, [status, session, handlePostSignupRedirect]);
-
-  // Mount Clerk's official <SignUp /> widget directly
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    let unsubscribeListener = null;
-    let pollTimer = null;
-    let fallbackTimer = null;
-
-    const mountClerkWidget = async () => {
-      if (!window.Clerk) return false;
-
-      try {
-        if (!isClerkLoaded() && typeof window.__initClerk === "function") {
-          await window.__initClerk();
-        } else if (!isClerkLoaded()) {
-          await window.Clerk.load({
-            signInUrl: "/account/signin",
-            signUpUrl: "/account/signup",
-          });
-        }
-
-        if (!isClerkLoaded()) return false;
-
-        setClerkLoaded(true);
-        setMountFallback(false);
-
-        if (window.Clerk.user && window.Clerk.session) {
-          handlePostSignupRedirect();
-          return true;
-        }
-
-        if (!unsubscribeListener && typeof window.Clerk.addListener === "function") {
-          unsubscribeListener = window.Clerk.addListener((resources) => {
-            if (resources?.user && resources?.session) {
-              handlePostSignupRedirect();
-            }
-          });
-        }
-
-        if (clerkMountRef.current && !isMountedWidgetRef.current) {
-          isMountedWidgetRef.current = true;
-          const params = new URLSearchParams(window.location.search);
-          const safeCallback = getSafeCallback(params.get("callbackUrl"));
-
-          window.Clerk.mountSignUp(clerkMountRef.current, {
-            signInUrl: safeCallback !== "/account"
-              ? `/account/signin?callbackUrl=${encodeURIComponent(safeCallback)}`
-              : "/account/signin",
-            fallbackRedirectUrl: safeCallback,
-            appearance: {
-              variables: {
-                colorPrimary: "#4A0A0F",
-                colorText: "#241819",
-                colorTextSecondary: "#57534E",
-                borderRadius: "1rem",
-                fontFamily: "inherit",
-              },
-              elements: {
-                rootBox: "w-full mx-auto",
-                card: "w-full shadow-none border-0 bg-transparent p-0",
-                cardBox: "w-full shadow-none border-0 bg-transparent",
-                headerTitle: "text-xl font-extrabold text-stone-900",
-                headerSubtitle: "text-xs text-stone-500",
-                socialButtonsBlockButton:
-                  "rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors",
-                formButtonPrimary:
-                  "rounded-xl bg-[#4A0A0F] hover:bg-[#360509] text-sm font-bold shadow-xs",
-                formFieldInput:
-                  "rounded-xl border-stone-300 focus:border-[#F97316] focus:ring-[#F97316]",
-                footer: "hidden",
-              },
-            },
-          });
-        }
-
-        return isMountedWidgetRef.current;
-      } catch (err) {
-        console.warn("[Clerk] Mount SignUp warning:", err);
-        return false;
-      }
-    };
-
-    const onClerkReady = () => {
-      mountClerkWidget();
-    };
-
-    window.addEventListener("clerk:ready", onClerkReady);
-
-    mountClerkWidget().then((mounted) => {
-      if (!mounted) {
-        let attempts = 0;
-        pollTimer = setInterval(async () => {
-          attempts += 1;
-          const ok = await mountClerkWidget();
-          if (ok || attempts >= 60) {
-            clearInterval(pollTimer);
-          }
-        }, 150);
-
-        fallbackTimer = setTimeout(() => {
-          if (!isMountedWidgetRef.current) {
-            setMountFallback(true);
-          }
-        }, 8000);
-      }
-    });
-
-    return () => {
-      window.removeEventListener("clerk:ready", onClerkReady);
-      if (pollTimer) clearInterval(pollTimer);
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      if (typeof unsubscribeListener === "function") {
-        try {
-          unsubscribeListener();
-        } catch {
-          // noop
-        }
-      }
-      if (clerkMountRef.current && isMountedWidgetRef.current && window.Clerk?.unmountSignUp) {
-        try {
-          window.Clerk.unmountSignUp(clerkMountRef.current);
-        } catch {
-          // noop
-        }
-        isMountedWidgetRef.current = false;
-      }
-    };
-  }, [handlePostSignupRedirect]);
-
-  if (redirecting) {
-    return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#FFFDF9] p-4">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#4A0A0F] border-t-transparent mb-4" />
-        <p className="text-sm font-bold text-stone-800">
-          Setting up your customer account...
-        </p>
-        <p className="text-xs text-stone-500 mt-1">
-          Saving your cart &amp; preparing your Sri Usha pet care portal
-        </p>
-      </div>
-    );
-  }
-
-  const benefits = [
-    {
-      icon: Zap,
-      title: "Faster checkout",
-      desc: "Speed through express checkout with prefilled customer details.",
-      accent: "bg-amber-50 text-[#EA580C] border-amber-100",
-    },
-    {
-      icon: Package,
-      title: "Order tracking",
-      desc: "Watch your pet supplies move from our Uppal vet hub to your door.",
-      accent: "bg-[#FFF7ED] text-[#F97316] border-[#FED7AA]",
-    },
-    {
-      icon: Heart,
-      title: "Wishlist",
-      desc: "Save vet diets, treats & grooming favourites to reorder anytime.",
-      accent: "bg-rose-50 text-rose-600 border-rose-100",
-    },
-    {
-      icon: MapPin,
-      title: "Saved delivery addresses",
-      desc: "Store home & clinic drop-off pins across Hyderabad & Secunderabad.",
-      accent: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    },
-  ];
+  }, [isLoaded, isSignedIn]);
 
   return (
-    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#241819] flex flex-col">
-      {/* Top Bar */}
-      <header className="w-full border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2.5 group">
+    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#241819] flex flex-col items-center justify-center px-4 py-8 select-none">
+      {/* Background warm aesthetic glows */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed -top-24 -right-24 h-96 w-96 rounded-full bg-orange-100/50 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed -bottom-24 -left-24 h-96 w-96 rounded-full bg-amber-100/50 blur-3xl"
+      />
+
+      <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center">
+        {/* Brand Logo & Title */}
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="h-16 w-16 rounded-2xl bg-white shadow-md border border-[#EADBCC] flex items-center justify-center p-2 mb-3">
             <img
-              src="/brand/logo-full.webp"
+              src="/brand/logo-mark.webp"
               onError={(e) => {
-                e.currentTarget.src = "/brand/logo-full.png";
+                e.currentTarget.src = "/brand/logo-mark.png";
               }}
-              alt="Sri Usha Vet & Pet Stores"
-              width={160}
+              alt="Sri Usha Pet Store"
+              width={48}
               height={48}
-              className="h-9 sm:h-10 w-auto transition-transform group-hover:scale-105"
+              className="h-12 w-12 object-contain"
             />
-          </a>
-
-          <a
-            href="/"
-            className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-3.5 py-1.5 text-xs font-bold text-[#4A0A0F] shadow-2xs hover:border-[#F97316] hover:text-[#F97316] transition-colors"
-          >
-            <ArrowLeft size={14} strokeWidth={1.75} />
-            <span>Back to Store</span>
-          </a>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#4A0A0F]">
+            Create Your Account
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm font-semibold text-stone-600 max-w-xs">
+            Join Sri Usha Pet Store to save your pet&apos;s prescriptions, track deliveries, and reorder favorites.
+          </p>
         </div>
-      </header>
 
-      {/* Main Two-Column Sign-Up Layout */}
-      <main className="flex-1 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-        <div className="mx-auto w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          {/* LEFT COLUMN — Onboarding Benefits */}
-          <section className="lg:col-span-6 relative overflow-hidden rounded-3xl border border-amber-100/90 bg-gradient-to-br from-white via-[#FFFDF9] to-[#FFF4E8] p-6 sm:p-10 shadow-sm">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-8 -top-8 h-44 w-44 rounded-full bg-amber-100/50 blur-2xl"
+        {/* Missing Publishable Key Warning */}
+        {!publishableKey ? (
+          <div className="w-full rounded-2xl border border-red-200 bg-white p-6 shadow-md text-center">
+            <AlertCircle size={32} className="mx-auto text-red-600 mb-2" />
+            <h2 className="text-base font-extrabold text-[#4A0A0F]">
+              Missing Clerk Publishable Key
+            </h2>
+            <p className="mt-1 text-xs text-stone-600">
+              Please configure <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> in your Netlify site settings.
+            </p>
+          </div>
+        ) : (
+          /* Clerk SignUp Widget */
+          <div className="w-full flex justify-center">
+            <SignUp
+              routing="hash"
+              fallbackRedirectUrl="/"
+              signInUrl="/account/signin"
+              appearance={{
+                elements: {
+                  rootBox: "w-full max-w-md",
+                  card: "rounded-2xl border border-[#EADBCC] bg-white shadow-lg p-6",
+                  headerTitle: "text-lg font-black text-[#4A0A0F]",
+                  headerSubtitle: "text-xs text-stone-500",
+                  socialButtonsBlockButton:
+                    "rounded-xl border border-stone-300 hover:border-[#F97316] font-bold text-xs min-h-[44px]",
+                  formButtonPrimary:
+                    "rounded-xl bg-[#4A0A0F] hover:bg-[#360509] text-white font-bold text-xs min-h-[44px]",
+                  formFieldInput:
+                    "rounded-xl border border-stone-300 text-xs min-h-[42px] focus:border-[#F97316]",
+                  footerActionLink: "text-[#F97316] hover:text-[#EA580C] font-bold text-xs",
+                },
+              }}
             />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -bottom-10 -left-10 h-44 w-44 rounded-full bg-amber-100/60 blur-2xl"
-            />
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 120 120"
-              className="pointer-events-none absolute right-5 bottom-5 h-28 w-28 text-[#EA580C]/[0.07]"
-              fill="currentColor"
-            >
-              <ellipse cx="60" cy="76" rx="22" ry="18" />
-              <circle cx="34" cy="48" r="9" />
-              <circle cx="51" cy="35" r="9.5" />
-              <circle cx="71" cy="35" r="9.5" />
-              <circle cx="88" cy="48" r="9" />
-            </svg>
+          </div>
+        )}
 
-            <div className="relative z-10 space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#FED7AA] bg-white/90 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-[#F97316] shadow-2xs">
-                <Sparkles size={13} strokeWidth={1.75} className="text-[#F97316]" />
-                <span>Your Pet Care Journey Starts Here</span>
-              </div>
-
-              <div className="space-y-3">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-[#4A0A0F] leading-tight">
-                  Join the Sri Usha Pet Care Family
-                </h1>
-                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-                  Create your free customer account in seconds for genuine veterinary products,
-                  effortless repeat orders, and local Hyderabad delivery.
-                </p>
-              </div>
-
-              {/* Four Member Benefits */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                {benefits.map((b) => {
-                  const Icon = b.icon;
-                  return (
-                    <div
-                      key={b.title}
-                      className="flex flex-col gap-2 rounded-2xl border border-white/90 bg-white/85 backdrop-blur-xs p-4 shadow-2xs transition-transform hover:-translate-y-0.5"
-                    >
-                      <div
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl border ${b.accent}`}
-                      >
-                        <Icon size={17} />
-                      </div>
-                      <div>
-                        <h2 className="text-xs sm:text-sm font-bold text-slate-900">
-                          {b.title}
-                        </h2>
-                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                          {b.desc}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="pt-2 border-t border-slate-200/70 flex items-center gap-2 text-[11px] font-medium text-slate-600">
-                <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                <span>
-                  Standard Customer Account • Verified by Clerk &amp; Protected by Sri Usha
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* RIGHT COLUMN — Clerk <SignUp /> Card */}
-          <section className="lg:col-span-6 w-full max-w-md mx-auto lg:max-w-lg">
-            <div className="mb-3 flex items-center justify-between px-1">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-bold text-emerald-800">
-                <Lock size={12} className="text-emerald-600" />
-                <span>Protected Customer Registration • Clerk</span>
-              </div>
-              <span className="text-[11px] font-medium text-slate-400">
-                Free Forever
-              </span>
-            </div>
-
-            <div className="rounded-3xl border border-stone-200/90 bg-white p-5 sm:p-8 shadow-xl shadow-stone-200/50">
-              {!getClerkPublishableKey() ? (
-                <div className="py-8 text-center space-y-3">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200">
-                    <Lock size={22} />
-                  </div>
-                  <h2 className="text-base font-extrabold text-stone-900">
-                    Registration Not Configured
-                  </h2>
-                  <p className="text-xs text-stone-500 max-w-xs mx-auto">
-                    The Clerk Publishable Key is missing. Please set <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> in Netlify environment variables.
-                  </p>
-                </div>
-              ) : (
-                <div className="w-full flex flex-col items-center justify-center">
-                  <SignUp
-                    routing="path"
-                    path="/account/signup"
-                    signInUrl={signInHref}
-                    fallbackRedirectUrl={callbackUrl || "/account"}
-                    appearance={{
-                      variables: {
-                        colorPrimary: "#4A0A0F",
-                        colorText: "#241819",
-                        colorTextSecondary: "#57534E",
-                        borderRadius: "1rem",
-                        fontFamily: "inherit",
-                      },
-                      elements: {
-                        rootBox: "w-full mx-auto",
-                        card: "w-full shadow-none border-0 bg-transparent p-0",
-                        cardBox: "w-full shadow-none border-0 bg-transparent",
-                        headerTitle: "text-xl font-extrabold text-stone-900",
-                        headerSubtitle: "text-xs text-stone-500",
-                        socialButtonsBlockButton:
-                          "rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors",
-                        formButtonPrimary:
-                          "rounded-xl bg-[#4A0A0F] hover:bg-[#360509] text-sm font-bold shadow-xs",
-                        formFieldInput:
-                          "rounded-xl border-stone-300 focus:border-[#F97316] focus:ring-[#F97316]",
-                        footer: "hidden",
-                      },
-                    }}
-                  />
-
-                  {/* Direct Mobile Portal Link if phone browser blocks cross-domain cookies */}
-                  {hostedSignUpUrl && (
-                    <div className="mt-4 pt-3 border-t border-stone-100 text-center w-full">
-                      <a
-                        href={hostedSignUpUrl}
-                        className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#F97316] hover:underline"
-                      >
-                        <span>Phone sign-up issue? Open direct Clerk Portal</span>
-                        <ExternalLink size={12} />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 pt-5 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <p className="text-stone-500">
-                  Already have an account?{" "}
-                  <a
-                    href={signInHref}
-                    className="font-bold text-[#F97316] hover:underline"
-                  >
-                    Sign In →
-                  </a>
-                </p>
-                <a
-                  href="/"
-                  className="inline-flex items-center gap-1 font-medium text-stone-500 hover:text-stone-900 transition-colors"
-                >
-                  <span>← Back to Store</span>
-                </a>
-              </div>
-            </div>
-          </section>
+        {/* Trust Badges */}
+        <div className="mt-8 flex items-center justify-center gap-4 text-[11px] font-bold text-stone-500">
+          <span className="flex items-center gap-1">
+            <ShieldCheck size={14} className="text-emerald-600" />
+            <span>100% Genuine Pet Care</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <PawPrint size={14} className="text-[#F97316]" />
+            <span>Trusted Vet Pharmacy</span>
+          </span>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

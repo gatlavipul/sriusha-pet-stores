@@ -27,6 +27,8 @@ import {
   Package,
   Tag,
   Zap,
+  AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 
 const CATEGORY_STYLE_MAP = {
@@ -182,9 +184,18 @@ export default function HomePage() {
     queryFn: () => fetch("/api/categories").then((res) => res.json()),
   });
 
-  const { data: productsData, isLoading: isLoadingProducts } = useQuery({
+  const {
+    data: productsData,
+    isLoading: isLoadingProducts,
+    isError: isProductsError,
+    refetch: refetchProducts,
+  } = useQuery({
     queryKey: ["featuredProducts"],
-    queryFn: () => fetch("/api/products?limit=8").then((res) => res.json()),
+    queryFn: () =>
+      fetch("/api/products?limit=8").then((res) => {
+        if (!res.ok) throw new Error("Failed to load products");
+        return res.json();
+      }),
   });
 
   const categories = categoriesData?.categories || [];
@@ -636,26 +647,43 @@ export default function HomePage() {
             </a>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {isLoadingProducts
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="rounded-2xl border border-stone-200 bg-white p-4 animate-pulse"
-                  >
-                    <div className="aspect-square rounded-xl bg-stone-200 mb-4" />
-                    <div className="h-4 w-20 rounded bg-stone-200 mb-2" />
-                    <div className="h-5 w-3/4 rounded bg-stone-200 mb-3" />
-                    <div className="h-6 w-1/3 rounded bg-stone-200" />
-                  </div>
-                ))
-              : featuredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                  />
-                ))}
-          </div>
+          {isProductsError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center my-4">
+              <AlertCircle className="mx-auto h-8 w-8 text-red-500 mb-2" />
+              <p className="text-sm font-bold text-red-800">
+                Something went wrong, tap to retry
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchProducts()}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#4A0A0F] px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#360509] transition-all min-h-[44px]"
+              >
+                <RotateCcw size={14} />
+                <span>Tap to retry</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
+              {isLoadingProducts
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="rounded-2xl border border-stone-200 bg-white p-3 sm:p-4 animate-pulse"
+                    >
+                      <div className="aspect-square rounded-xl bg-stone-200 mb-3" />
+                      <div className="h-3 w-16 rounded bg-stone-200 mb-2" />
+                      <div className="h-4 w-3/4 rounded bg-stone-200 mb-3" />
+                      <div className="h-5 w-1/3 rounded bg-stone-200" />
+                    </div>
+                  ))
+                : featuredProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                    />
+                  ))}
+            </div>
+          )}
         </div>
       </section>
 

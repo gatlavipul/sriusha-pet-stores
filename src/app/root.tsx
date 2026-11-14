@@ -28,6 +28,7 @@ import fetch from '@/__create/fetch';
 // @ts-expect-error -- generated auth module, no type declarations available
 import { SessionProvider } from '@auth/create/react';
 import { ClerkProvider } from '@clerk/clerk-react';
+import AuthRouteGuard from '@/components/AuthRouteGuard';
 import { toPng } from 'html-to-image';
 import { useNavigate } from 'react-router';
 import { serializeError } from 'serialize-error';
@@ -492,7 +493,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <Meta />
         <Links />
         <script type="module" src="/src/__create/dev-error-overlay.js"></script>
@@ -559,7 +560,7 @@ export function Layout({ children }: { children: ReactNode }) {
         ) : null}
         {LoadFontsSSR ? <LoadFontsSSR /> : null}
       </head>
-      <body>
+      <body className="overflow-x-hidden min-h-screen bg-[#FFFDF9] text-[#241819]">
         {!clerkPublishableKey ? (
           <div
             role="alert"
@@ -595,7 +596,9 @@ export default function App() {
 
   const content = (
     <SessionProvider>
-      <Outlet />
+      <AuthRouteGuard>
+        <Outlet />
+      </AuthRouteGuard>
     </SessionProvider>
   );
 
@@ -610,8 +613,8 @@ export default function App() {
       routerReplace={(to: string) => navigate(to, { replace: true })}
       signInUrl="/account/signin"
       signUpUrl="/account/signup"
-      signInFallbackRedirectUrl="/account"
-      signUpFallbackRedirectUrl="/account"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
     >
       {content}
     </ClerkProvider>
