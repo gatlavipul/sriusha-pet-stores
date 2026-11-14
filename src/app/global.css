@@ -54,5 +54,21 @@
 
 .bg-brand-cream { background-color: #FAF7F2; }
 .bg-brand-cream-card { background-color: #FFFDF9; }
+
+/* Clerk Fluid Mobile Responsive Overrides */
+.cl-rootBox {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+}
+.cl-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  border-radius: 1rem !important;
+}
+.cl-main {
+  width: 100% !important;
+}
 .text-brand-dark { color: #241819; }
 .text-brand-muted { color: #6E5F5F; }

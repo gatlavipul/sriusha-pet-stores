@@ -42,7 +42,7 @@ export default function SignInPage() {
         className="pointer-events-none fixed -bottom-24 -left-24 h-96 w-96 rounded-full bg-amber-100/50 blur-3xl"
       />
 
-      <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center">
+      <div className="relative z-10 w-full max-w-[340px] sm:max-w-md mx-auto flex flex-col items-center">
         {/* Brand Logo & Title */}
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="h-16 w-16 rounded-2xl bg-white shadow-md border border-[#EADBCC] flex items-center justify-center p-2 mb-3">
