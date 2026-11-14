@@ -27,6 +27,7 @@ import { LoadFonts } from 'virtual:load-fonts.jsx';
 import fetch from '@/__create/fetch';
 // @ts-expect-error -- generated auth module, no type declarations available
 import { SessionProvider } from '@auth/create/react';
+import { ClerkProvider } from '@clerk/clerk-react';
 import { toPng } from 'html-to-image';
 import { useNavigate } from 'react-router';
 import { serializeError } from 'serialize-error';
@@ -428,7 +429,17 @@ export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const pathname = location?.pathname;
   const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
-  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const clerkPublishableKey =
+    (typeof process !== 'undefined' &&
+      (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+        process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        process.env.CLERK_PUBLISHABLE_KEY)) ||
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      (import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+        import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        import.meta.env.CLERK_PUBLISHABLE_KEY)) ||
+    '';
   const clerkScriptUrl = getClerkScriptUrl(clerkPublishableKey);
 
   useEffect(() => {
@@ -549,6 +560,14 @@ export function Layout({ children }: { children: ReactNode }) {
         {LoadFontsSSR ? <LoadFontsSSR /> : null}
       </head>
       <body>
+        {!clerkPublishableKey ? (
+          <div
+            role="alert"
+            className="bg-amber-600 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[100] shadow-md flex items-center justify-center gap-2"
+          >
+            <span>⚠️ Clerk Authentication Warning: Publishable key is missing. Please set <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> in Netlify environment variables.</span>
+          </div>
+        ) : null}
         <ClientOnly loader={() => children} />
         <Toaster position={isMobile ? 'top-center' : 'bottom-right'} />
         <ScrollRestoration />
@@ -560,9 +579,41 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
-  return (
+  const navigate = useNavigate();
+
+  const clerkPublishableKey =
+    (typeof process !== 'undefined' &&
+      (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+        process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        process.env.CLERK_PUBLISHABLE_KEY)) ||
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      (import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+        import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        import.meta.env.CLERK_PUBLISHABLE_KEY)) ||
+    '';
+
+  const content = (
     <SessionProvider>
       <Outlet />
     </SessionProvider>
+  );
+
+  if (!clerkPublishableKey) {
+    return content;
+  }
+
+  return (
+    <ClerkProvider
+      publishableKey={clerkPublishableKey}
+      routerPush={(to: string) => navigate(to)}
+      routerReplace={(to: string) => navigate(to, { replace: true })}
+      signInUrl="/account/signin"
+      signUpUrl="/account/signup"
+      signInFallbackRedirectUrl="/account"
+      signUpFallbackRedirectUrl="/account"
+    >
+      {content}
+    </ClerkProvider>
   );
 }

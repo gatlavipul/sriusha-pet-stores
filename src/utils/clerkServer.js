@@ -16,7 +16,10 @@ import { triggerWelcomeNotification } from "./notificationService.js";
 const sessionCache = new Map();
 
 export function isClerkConfigured() {
-  const publishable = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const publishable =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+    process.env.CLERK_PUBLISHABLE_KEY;
   const secret = process.env.CLERK_SECRET_KEY;
   return Boolean(
     publishable &&
@@ -31,7 +34,11 @@ export function isClerkConfigured() {
  * Derives the Clerk Frontend API domain from the publishable key
  */
 export function getClerkFrontendApi() {
-  const publishable = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
+  const publishable =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+    process.env.CLERK_PUBLISHABLE_KEY ||
+    "";
   if (!publishable.startsWith("pk_")) return null;
   try {
     const raw = publishable.replace(/^pk_(test|live)_/, "");

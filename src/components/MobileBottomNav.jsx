@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Home, Search, PawPrint, ShoppingCart, User } from "lucide-react";
+import { Home, Search, PawPrint, ShoppingCart, User, LogIn } from "lucide-react";
 import useCart from "@/utils/useCart";
+import useUser from "@/utils/useUser";
 
 export default function MobileBottomNav() {
   const { totalCount } = useCart();
+  const { data: user, loading } = useUser();
   const [currentPath, setCurrentPath] = useState("/");
 
   useEffect(() => {
@@ -20,8 +22,23 @@ export default function MobileBottomNav() {
     return null;
   }
 
+  const handleAccountClick = (e) => {
+    if (!user && !loading) {
+      // If window.Clerk has openSignIn, open the Clerk modal immediately on screen
+      if (typeof window !== "undefined" && window.Clerk && typeof window.Clerk.openSignIn === "function") {
+        e.preventDefault();
+        window.Clerk.openSignIn({
+          fallbackRedirectUrl: "/account",
+          signUpUrl: "/account/signup",
+        });
+        return;
+      }
+      // Otherwise native navigation to /account/signin will occur via href
+    }
+  };
+
   // Exactly 5 navigation items as specified in Phase 2 & Brand guidelines:
-  // Home, Search (Browse), PawPrint (My Pets), ShoppingCart (Cart), User (Account)
+  // Home, Search (Browse), PawPrint (My Pets), ShoppingCart (Cart), Account / Sign In
   const navItems = [
     { label: "Home", href: "/", icon: Home },
     { label: "Browse", href: "/products", icon: Search },
@@ -33,7 +50,13 @@ export default function MobileBottomNav() {
       badge: totalCount > 0 ? totalCount : null,
       badgeColor: "bg-[#F97316]",
     },
-    { label: "Account", href: "/account", icon: User },
+    {
+      label: user ? "Account" : "Sign In",
+      href: user ? "/account" : "/account/signin?callbackUrl=/account",
+      icon: user ? User : LogIn,
+      isAccount: true,
+      onClick: handleAccountClick,
+    },
   ];
 
   return (
@@ -49,10 +72,12 @@ export default function MobileBottomNav() {
             item.href === "/"
               ? currentPath === "/"
               : currentPath.startsWith(item.href.split("?")[0]);
+
           return (
             <a
               key={item.label}
               href={item.href}
+              onClick={item.onClick}
               className={`flex flex-col items-center justify-center flex-1 py-1 relative transition-colors ${
                 isActive
                   ? "text-[#4A0A0F] font-bold"
@@ -61,12 +86,26 @@ export default function MobileBottomNav() {
               aria-label={item.label}
             >
               <div className="relative flex items-center justify-center">
-                <Icon
-                  size={20}
-                  strokeWidth={isActive ? 2.5 : 1.75}
-                  className={isActive ? "text-[#4A0A0F]" : "text-stone-500"}
-                  fill={isActive ? (item.label === "Cart" || item.label === "Account" || item.label === "Home" ? "currentColor" : "none") : "none"}
-                />
+                {item.isAccount && user?.image ? (
+                  <img
+                    src={user.image}
+                    alt={user.name || "User"}
+                    className="h-5 w-5 rounded-full object-cover border border-[#4A0A0F]/30"
+                  />
+                ) : (
+                  <Icon
+                    size={20}
+                    strokeWidth={isActive ? 2.5 : 1.75}
+                    className={isActive ? "text-[#4A0A0F]" : "text-stone-500"}
+                    fill={
+                      isActive
+                        ? item.label === "Cart" || item.label === "Account" || item.label === "Home"
+                          ? "currentColor"
+                          : "none"
+                        : "none"
+                    }
+                  />
+                )}
                 {item.badge !== null && item.badge !== undefined && (
                   <span
                     className={`absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full ${item.badgeColor} text-[10px] font-black text-white flex items-center justify-center leading-none shadow-xs`}

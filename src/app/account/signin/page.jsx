@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "@auth/create/react";
+import { SignIn } from "@clerk/clerk-react";
 import {
   ShieldCheck,
   CheckCircle,
@@ -59,12 +60,24 @@ function resolveSafeRedirect(rawCallbackUrl, role) {
   return url;
 }
 
+function getClerkPublishableKey() {
+  return (
+    (typeof process !== "undefined" &&
+      (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+        process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        process.env.CLERK_PUBLISHABLE_KEY)) ||
+    (typeof import.meta !== "undefined" &&
+      import.meta.env &&
+      (import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+        import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        import.meta.env.CLERK_PUBLISHABLE_KEY)) ||
+    ""
+  );
+}
+
 function getClerkHostedDomain() {
   try {
-    const pk =
-      (typeof import.meta !== "undefined" && import.meta.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
-      (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) ||
-      "";
+    const pk = getClerkPublishableKey();
     if (!pk.startsWith("pk_")) return null;
     const raw = pk.replace(/^pk_(test|live)_/, "");
     const decoded = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
@@ -483,46 +496,62 @@ export default function SignInPage() {
             )}
 
             <div className="rounded-3xl border border-stone-200/90 bg-white p-5 sm:p-8 shadow-xl shadow-stone-200/50">
-              {!clerkLoaded && !mountFallback && (
-                <div className="py-12 flex flex-col items-center justify-center text-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#4A0A0F] border-t-transparent mb-3" />
-                  <p className="text-sm font-bold text-stone-800">
-                    Connecting to Clerk Secure Sign-In...
-                  </p>
-                  <p className="text-xs text-stone-500 mt-1">
-                    Loading your protected authentication options
+              {!getClerkPublishableKey() ? (
+                <div className="py-8 text-center space-y-3">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-200">
+                    <Lock size={22} />
+                  </div>
+                  <h2 className="text-base font-extrabold text-stone-900">
+                    Authentication Not Configured
+                  </h2>
+                  <p className="text-xs text-stone-500 max-w-xs mx-auto">
+                    The Clerk Publishable Key is missing. Please set <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> in Netlify environment variables.
                   </p>
                 </div>
-              )}
+              ) : (
+                <div className="w-full flex flex-col items-center justify-center">
+                  <SignIn
+                    routing="path"
+                    path="/account/signin"
+                    signUpUrl={signUpHref}
+                    fallbackRedirectUrl={callbackUrl || "/account"}
+                    appearance={{
+                      variables: {
+                        colorPrimary: "#4A0A0F",
+                        colorText: "#241819",
+                        colorTextSecondary: "#57534E",
+                        borderRadius: "1rem",
+                        fontFamily: "inherit",
+                      },
+                      elements: {
+                        rootBox: "w-full mx-auto",
+                        card: "w-full shadow-none border-0 bg-transparent p-0",
+                        cardBox: "w-full shadow-none border-0 bg-transparent",
+                        headerTitle: "text-xl font-extrabold text-stone-900",
+                        headerSubtitle: "text-xs text-stone-500",
+                        socialButtonsBlockButton:
+                          "rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors",
+                        formButtonPrimary:
+                          "rounded-xl bg-[#4A0A0F] hover:bg-[#360509] text-sm font-bold shadow-xs",
+                        formFieldInput:
+                          "rounded-xl border-stone-300 focus:border-[#F97316] focus:ring-[#F97316]",
+                        footer: "hidden",
+                      },
+                    }}
+                  />
 
-              {/* Clerk mounts its official <SignIn /> component here */}
-              <div
-                ref={clerkMountRef}
-                id="clerk-signin-container"
-                className="w-full flex justify-center"
-              />
-
-              {/* Hosted Fallback if script is blocked */}
-              {mountFallback && !clerkLoaded && hostedSignInUrl && (
-                <div className="py-6 text-center space-y-4">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF7ED] text-[#F97316]">
-                    <ShieldCheck size={24} />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-stone-900">
-                      Continue to Clerk Sign-In
-                    </h2>
-                    <p className="text-xs text-stone-500 mt-1">
-                      Open Clerk&apos;s verified portal to sign in securely to your Sri Usha account.
-                    </p>
-                  </div>
-                  <a
-                    href={hostedSignInUrl}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#4A0A0F] py-3 px-4 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#360509] transition-all"
-                  >
-                    <span>Sign In with Clerk</span>
-                    <ExternalLink size={15} />
-                  </a>
+                  {/* Direct Mobile Portal Link if phone browser blocks cross-domain cookies */}
+                  {hostedSignInUrl && (
+                    <div className="mt-4 pt-3 border-t border-stone-100 text-center w-full">
+                      <a
+                        href={hostedSignInUrl}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#F97316] hover:underline"
+                      >
+                        <span>Phone login issue? Open direct Clerk Portal</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 

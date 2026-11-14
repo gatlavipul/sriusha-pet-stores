@@ -16,6 +16,7 @@ import {
   Cat,
   Stethoscope,
   Sparkles,
+  Menu,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 import useAuth from "@/utils/useAuth";
@@ -32,6 +33,7 @@ export default function Header() {
   const [isDeliveryPartner, setIsDeliveryPartner] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -423,6 +425,46 @@ export default function Header() {
                 )}
               </a>
 
+              {/* Mobile Sign In / Profile Direct Button */}
+              <div className="sm:hidden flex items-center shrink-0">
+                {user ? (
+                  <a
+                    href="/account"
+                    className="flex items-center p-1 rounded-full border border-[#EADBCC] hover:border-[#F97316] transition-colors"
+                    aria-label="My Account"
+                  >
+                    {user.image ? (
+                      <img
+                        src={user.image}
+                        alt={user.name || "User"}
+                        className="h-6 w-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#4A0A0F] text-[10px] font-black text-white">
+                        {(user.name || user.email || "U")[0].toUpperCase()}
+                      </div>
+                    )}
+                  </a>
+                ) : (
+                  <a
+                    href="/account/signin"
+                    className="rounded-full border border-[#4A0A0F] text-[#4A0A0F] hover:bg-[#4A0A0F] hover:text-white px-2.5 py-1 text-xs font-bold transition-colors shrink-0"
+                  >
+                    Sign In
+                  </a>
+                )}
+              </div>
+
+              {/* Mobile Hamburger Menu Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="lg:hidden p-1.5 text-stone-700 hover:text-[#F97316] rounded-full hover:bg-[#FAF7F2] transition-colors shrink-0"
+                aria-label="Open mobile navigation menu"
+              >
+                <Menu size={20} strokeWidth={1.75} />
+              </button>
+
               {/* User Account / Profile Menu (Desktop & Tablet) */}
               <div className="hidden sm:block">
                 {user ? (
@@ -597,6 +639,214 @@ export default function Header() {
           </div>
         )}
       </header>
+
+      {/* MOBILE HAMBURGER MENU DRAWER */}
+      {mobileMenuOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="lg:hidden fixed inset-0 z-50 flex bg-black/60 backdrop-blur-2xs animate-in fade-in"
+        >
+          <div
+            className="fixed inset-0"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative ml-auto flex h-full w-full max-w-xs flex-col bg-[#FFFDF9] shadow-2xl border-l border-[#EADBCC] p-5 overflow-y-auto animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-[#EADBCC]">
+              <div className="flex items-center gap-2">
+                <img
+                  src="/brand/logo-mark.webp"
+                  onError={(e) => {
+                    e.currentTarget.src = "/brand/logo-mark.png";
+                  }}
+                  alt="Sri Usha Pet Store"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 object-contain"
+                />
+                <span className="text-base font-black text-[#4A0A0F]">Sri Usha Pet Store</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors"
+                aria-label="Close navigation menu"
+              >
+                <X size={20} strokeWidth={1.75} />
+              </button>
+            </div>
+
+            {/* User Account / Auth Section */}
+            <div className="py-4 border-b border-[#EADBCC]">
+              {user ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    {user.image ? (
+                      <img
+                        src={user.image}
+                        alt={user.name || "User"}
+                        className="h-10 w-10 rounded-full object-cover border border-[#EADBCC]"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#4A0A0F] text-xs font-black text-white">
+                        {(user.name || user.email || "U")[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-[#241819] truncate">{user.name || "Customer"}</p>
+                      <p className="text-[11px] text-stone-500 truncate">{user.email || ""}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <a
+                      href="/account"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-xl border border-[#EADBCC] bg-[#FAF7F2] py-2 px-3 text-center text-xs font-bold text-[#4A0A0F] hover:bg-[#F3EDE2] transition-colors"
+                    >
+                      My Account
+                    </a>
+                    <a
+                      href="/orders"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-xl border border-[#EADBCC] bg-[#FAF7F2] py-2 px-3 text-center text-xs font-bold text-[#4A0A0F] hover:bg-[#F3EDE2] transition-colors"
+                    >
+                      Orders
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <p className="text-xs font-extrabold text-[#4A0A0F]">Welcome to Sri Usha Pet Store</p>
+                  <p className="text-[11px] text-stone-500 leading-snug">Sign in to track orders, manage pet health records, and checkout faster.</p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <a
+                      href="/account/signin"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-xl bg-[#4A0A0F] py-2.5 px-3 text-center text-xs font-black text-white shadow-xs hover:bg-[#34070a] transition-colors"
+                    >
+                      Sign In
+                    </a>
+                    <a
+                      href="/account/signup"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-xl border border-[#4A0A0F] py-2.5 px-3 text-center text-xs font-black text-[#4A0A0F] hover:bg-[#4A0A0F] hover:text-white transition-colors"
+                    >
+                      Sign Up
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Category Links */}
+            <div className="py-4 border-b border-[#EADBCC] space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-stone-400 mb-2">Shop Categories</p>
+              <a
+                href="/products?category=dog"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-[#FFF7ED] hover:text-[#F97316] transition-colors"
+              >
+                <Dog size={16} className="text-[#F97316]" />
+                <span>Dogs Food &amp; Essentials</span>
+              </a>
+              <a
+                href="/products?category=cat"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-[#FFF7ED] hover:text-[#F97316] transition-colors"
+              >
+                <Cat size={16} className="text-[#F97316]" />
+                <span>Cats Food &amp; Accessories</span>
+              </a>
+              <a
+                href="/products?category=healthcare"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-[#FFF7ED] hover:text-[#F97316] transition-colors"
+              >
+                <Stethoscope size={16} className="text-[#F97316]" />
+                <span>Veterinary &amp; Healthcare</span>
+              </a>
+              <a
+                href="/products"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-[#FFF7ED] hover:text-[#F97316] transition-colors"
+              >
+                <Package size={16} className="text-stone-500" />
+                <span>Browse All Products</span>
+              </a>
+            </div>
+
+            {/* Quick Links */}
+            <div className="py-4 border-b border-[#EADBCC] space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-stone-400 mb-2">Quick Navigation</p>
+              <a
+                href="/cart"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-stone-50 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <ShoppingCart size={16} className="text-[#4A0A0F]" />
+                  <span>My Cart</span>
+                </div>
+                {totalCount > 0 && (
+                  <span className="rounded-full bg-[#F97316] px-2 py-0.5 text-[10px] font-black text-white">
+                    {totalCount}
+                  </span>
+                )}
+              </a>
+              <a
+                href="/wishlist"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-stone-50 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Heart size={16} className="text-rose-500" />
+                  <span>Wishlist</span>
+                </div>
+                {wishlistCount > 0 && (
+                  <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">
+                    {wishlistCount}
+                  </span>
+                )}
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowLocationModal(true);
+                }}
+                className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold text-stone-800 hover:bg-stone-50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2.5">
+                  <MapPin size={16} className="text-[#F97316]" />
+                  <span>Delivery Pincode</span>
+                </div>
+                <span className="text-[11px] font-semibold text-stone-500">
+                  {deliveryPincode}
+                </span>
+              </button>
+            </div>
+
+            {/* Sign Out (if logged in) */}
+            {user && (
+              <div className="pt-4 mt-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleSignOut();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 py-2.5 px-3 text-xs font-black text-rose-700 hover:bg-rose-100 transition-colors"
+                >
+                  <LogOut size={15} />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* HYPERLOCAL DELIVERY LOCATION MODAL (Pincode & Serviceability check) */}
       {showLocationModal && (
