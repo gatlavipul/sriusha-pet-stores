@@ -39,7 +39,7 @@ export async function validateCheckoutPayload({
     `,
     variantIds.length > 0
       ? sql`
-          SELECT id, product_id, label, price, stock_quantity, is_active
+          SELECT id, product_id, label, price, stock_quantity, is_active, needs_review
           FROM product_variants
           WHERE id = ANY(${variantIds}::int[])
         `
@@ -72,11 +72,17 @@ export async function validateCheckoutPayload({
     const qty = Math.max(1, parseInt(item.quantity || 1, 10));
     let vid = item.variant_id ? parseInt(item.variant_id, 10) : null;
 
-    // Rule 3: If a product has variants, use ONLY variant stock for availability & deduction
-    const productActiveVariants = dbVariants.filter((v) => v.product_id === dbProd.id);
-    if (productActiveVariants.length > 0 && !vid) {
-      // Find matching by label or default to first active variant
-      const matched = productActiveVariants.find((v) => v.label === item.variant_name) || productActiveVariants[0];
+    // Rule: Unreviewed variants (needs_review = true) must NOT be sold as-is
+    // If a product has reviewed variants, use variant stock; otherwise treat as single-option product
+    const reviewedActiveVariants = dbVariants.filter(
+      (v) => v.product_id === dbProd.id && v.is_active && !v.needs_review
+    );
+
+    if (reviewedActiveVariants.length > 0 && !vid) {
+      // Find matching by label or default to first reviewed active variant
+      const matched =
+        reviewedActiveVariants.find((v) => v.label === item.variant_name) ||
+        reviewedActiveVariants[0];
       vid = matched.id;
     }
 
@@ -86,6 +92,13 @@ export async function validateCheckoutPayload({
         return {
           valid: false,
           error: `Selected package size for "${dbProd.name}" is unavailable or discontinued.`,
+          status: 400,
+        };
+      }
+      if (dbVar.needs_review) {
+        return {
+          valid: false,
+          error: `The selected size for "${dbProd.name}" is pending review and cannot be purchased.`,
           status: 400,
         };
       }
@@ -295,10 +308,10 @@ export async function executeAtomicOrderTransaction({
           newStock: newStock,
         });
 
-        // Rule 3: Keep parent product total stock synchronized as sum of active variants
+        // Rule 3: Keep parent product total stock synchronized as sum of reviewed active variants
         await client.query(
           `UPDATE products
-           SET stock_quantity = COALESCE((SELECT SUM(stock_quantity)::int FROM product_variants WHERE product_id = $1 AND is_active = TRUE), 0),
+           SET stock_quantity = COALESCE((SELECT SUM(stock_quantity)::int FROM product_variants WHERE product_id = $1 AND is_active = TRUE AND needs_review = FALSE), 0),
                updated_at = NOW()
            WHERE id = $1`,
           [item.product_id]

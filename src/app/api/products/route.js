@@ -42,7 +42,7 @@ export async function GET(request) {
       const variants = await sql`
         SELECT id, product_id, label, price, compare_price, stock_quantity, sku, sort_order
         FROM product_variants
-        WHERE product_id = ANY(${productIds}) AND is_active = true
+        WHERE product_id = ANY(${productIds}) AND is_active = true AND needs_review = false
         ORDER BY sort_order ASC, id ASC
       `;
       const byProduct = new Map();

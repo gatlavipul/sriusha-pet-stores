@@ -215,24 +215,40 @@ export default function AdminProductsPage() {
     });
   };
 
-  // --- Weight/Size Variants ---
-  const addVariant = () => {
-    const trimmed = newVariant.trim();
-    if (trimmed && !weightVariants.includes(trimmed)) {
-      setWeightVariants([...weightVariants, trimmed]);
-      setNewVariant("");
-    }
+  // --- Variant Editor Helpers ---
+  const handleAddVariantRow = () => {
+    setVariantRows((prev) => [
+      ...prev,
+      {
+        id: null,
+        label: "",
+        sku: "",
+        price: formData.price || "",
+        compare_price: formData.compare_price || "",
+        stock_quantity: "0",
+        reorder_level: "5",
+        is_active: true,
+        needs_review: false,
+      },
+    ]);
   };
 
-  const removeVariant = (index) => {
-    setWeightVariants(weightVariants.filter((_, i) => i !== index));
+  const updateVariantField = (index, field, value) => {
+    setVariantRows((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+    );
   };
 
-  const handleVariantKeyDown = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addVariant();
-    }
+  const handleToggleVariantActive = (index) => {
+    setVariantRows((prev) =>
+      prev.map((row, i) =>
+        i === index ? { ...row, is_active: row.is_active === false ? true : false } : row
+      )
+    );
+  };
+
+  const handleRemoveVariantRow = (index) => {
+    setVariantRows((prev) => prev.filter((_, i) => i !== index));
   };
 
   // --- Form Helpers ---
@@ -299,11 +315,15 @@ export default function AdminProductsPage() {
       if (Array.isArray(fullProduct.variants)) {
         setVariantRows(
           fullProduct.variants.map((v) => ({
+            id: v.id,
             label: v.label || "",
+            sku: v.sku || "",
             price: String(v.price ?? ""),
             compare_price: v.compare_price ? String(v.compare_price) : "",
             stock_quantity: String(v.stock_quantity ?? 0),
-            sku: v.sku || "",
+            reorder_level: String(v.reorder_level ?? 5),
+            is_active: v.is_active !== false,
+            needs_review: Boolean(v.needs_review),
           }))
         );
       }
@@ -339,20 +359,49 @@ export default function AdminProductsPage() {
     setError(null);
 
     try {
+      // Client validation for base product MRP
+      if (formData.compare_price) {
+        const pPrice = parseFloat(formData.price || 0);
+        const pCompare = parseFloat(formData.compare_price);
+        if (!isNaN(pCompare) && pCompare < pPrice) {
+          throw new Error("Product MRP (compare price) cannot be lower than selling price.");
+        }
+      }
+
+      // Client validation for variants
+      for (const v of variantRows) {
+        if (!v.label.trim()) {
+          throw new Error("All variants must have a label (e.g. 1 kg, 3 kg).");
+        }
+        const vPrice = parseFloat(v.price || 0);
+        if (isNaN(vPrice) || vPrice <= 0) {
+          throw new Error(`Variant "${v.label}" must have a price greater than 0.`);
+        }
+        if (v.compare_price) {
+          const vCompare = parseFloat(v.compare_price);
+          if (!isNaN(vCompare) && vCompare < vPrice) {
+            throw new Error(`Variant "${v.label}" MRP cannot be lower than selling price.`);
+          }
+        }
+      }
+
       const payload = {
         ...formData,
         requires_prescription: Boolean(formData.requires_prescription),
         variants: variantRows
-          .filter((v) => v.label.trim() && Number(v.price) > 0)
+          .filter((v) => v.label.trim())
           .map((v, idx) => ({
+            id: v.id || null,
             label: v.label.trim(),
-            price: Number(v.price),
-            compare_price: v.compare_price ? Number(v.compare_price) : null,
-            stock_quantity: Math.max(0, parseInt(v.stock_quantity || "0", 10) || 0),
             sku: v.sku?.trim() || null,
+            price: parseFloat(v.price || 0),
+            compare_price: v.compare_price ? parseFloat(v.compare_price) : null,
+            stock_quantity: Math.max(0, parseInt(v.stock_quantity || "0", 10) || 0),
+            reorder_level: Math.max(0, parseInt(v.reorder_level || "5", 10) || 5),
+            is_active: v.is_active !== false,
             sort_order: idx,
           })),
-        weight: weightVariants.length > 0 ? weightVariants.join(",") : formData.weight || null,
+        weight: variantRows.length > 0 ? variantRows.map((v) => v.label.trim()).join(", ") : formData.weight || null,
         images: uploadedImages.map((img, i) => ({
           url: img.url,
           isDefault: img.isDefault,
@@ -663,9 +712,30 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="p-4">
                         <div>
-                          <p className="text-sm font-semibold text-[#111827]">
-                            {product.name}
-                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-semibold text-[#111827]">
+                              {product.name}
+                            </p>
+                            {/* Warning Badges for Unreviewed Variants & Invalid MRP */}
+                            {product.unreviewed_variants_count > 0 && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-bold px-1.5 py-0.5"
+                                title="This product has variants that need admin review before they can be sold to customers."
+                              >
+                                <AlertTriangle size={10} />
+                                Needs Review ({product.unreviewed_variants_count})
+                              </span>
+                            )}
+                            {product.compare_price && parseFloat(product.compare_price) <= parseFloat(product.price) && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded bg-red-100 border border-red-300 text-red-800 text-[10px] font-bold px-1.5 py-0.5"
+                                title="MRP cannot be lower than or equal to selling price."
+                              >
+                                <AlertTriangle size={10} />
+                                Invalid MRP
+                              </span>
+                            )}
+                          </div>
                           {product.brand && (
                             <p className="text-xs text-[#9CA3AF]">{product.brand}</p>
                           )}
@@ -967,46 +1037,143 @@ export default function AdminProductsPage() {
                 />
               </div>
 
-              {/* Weight/Size Variants */}
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-[#374151]">
-                  Weight/Size Variants
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newVariant}
-                    onChange={(e) => setNewVariant(e.target.value)}
-                    onKeyDown={handleVariantKeyDown}
-                    placeholder="e.g. 1kg, 2kg, Small, Medium, Large"
-                    className="flex-1 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm outline-none focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20"
-                  />
+              {/* Admin Variant Editor Section */}
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-[#111827]">Package Size & Weight Variants</h3>
+                    <p className="text-xs text-[#6B7280]">
+                      Each variant has its own price, MRP, stock, and SKU. Saving a variant marks it as reviewed (needs_review = false).
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={addVariant}
-                    className="rounded-lg bg-[#2ECC71] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#27AE60] transition-colors"
+                    onClick={handleAddVariantRow}
+                    className="inline-flex items-center gap-1 rounded-lg bg-[#4A0A0F] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#360509] shadow-xs"
                   >
-                    Add
+                    <Plus size={14} />
+                    <span>Add Variant</span>
                   </button>
                 </div>
-                {weightVariants.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {weightVariants.map((variant, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1 rounded-full bg-[#E8F8F0] px-3 py-1 text-xs font-medium text-[#27AE60]"
-                      >
-                        {variant}
-                        <button
-                          type="button"
-                          onClick={() => removeVariant(i)}
-                          className="ml-0.5 text-[#27AE60] hover:text-red-500"
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
+
+                {variantRows.length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border border-[#E5E7EB] bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#F3F4F6] text-[#374151] font-semibold">
+                        <tr>
+                          <th className="p-2.5">Label *</th>
+                          <th className="p-2.5">SKU</th>
+                          <th className="p-2.5">Price (₹) *</th>
+                          <th className="p-2.5">MRP (₹)</th>
+                          <th className="p-2.5">Stock *</th>
+                          <th className="p-2.5">Reorder Level</th>
+                          <th className="p-2.5 text-center">Status</th>
+                          <th className="p-2.5 text-center">Active</th>
+                          <th className="p-2.5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E7EB]">
+                        {variantRows.map((v, idx) => (
+                          <tr key={idx} className={v.is_active === false ? "bg-stone-50 opacity-60" : ""}>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                required
+                                value={v.label}
+                                onChange={(e) => updateVariantField(idx, "label", e.target.value)}
+                                placeholder="e.g. 3 kg"
+                                className="w-24 rounded border border-[#E5E7EB] px-2 py-1 text-xs outline-none focus:border-[#F97316]"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={v.sku}
+                                onChange={(e) => updateVariantField(idx, "sku", e.target.value)}
+                                placeholder="SKU"
+                                className="w-24 rounded border border-[#E5E7EB] px-2 py-1 text-xs outline-none focus:border-[#F97316]"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                required
+                                min="0.01"
+                                step="0.01"
+                                value={v.price}
+                                onChange={(e) => updateVariantField(idx, "price", e.target.value)}
+                                placeholder="₹"
+                                className="w-20 rounded border border-[#E5E7EB] px-2 py-1 text-xs outline-none focus:border-[#F97316]"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={v.compare_price}
+                                onChange={(e) => updateVariantField(idx, "compare_price", e.target.value)}
+                                placeholder="₹ MRP"
+                                className="w-20 rounded border border-[#E5E7EB] px-2 py-1 text-xs outline-none focus:border-[#F97316]"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                required
+                                min="0"
+                                value={v.stock_quantity}
+                                onChange={(e) => updateVariantField(idx, "stock_quantity", e.target.value)}
+                                className="w-16 rounded border border-[#E5E7EB] px-2 py-1 text-xs outline-none focus:border-[#F97316]"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                value={v.reorder_level}
+                                onChange={(e) => updateVariantField(idx, "reorder_level", e.target.value)}
+                                className="w-16 rounded border border-[#E5E7EB] px-2 py-1 text-xs outline-none focus:border-[#F97316]"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              {v.needs_review ? (
+                                <span className="inline-flex rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">
+                                  Needs Review
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-bold">
+                                  Reviewed
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={v.is_active !== false}
+                                onChange={() => handleToggleVariantActive(idx)}
+                                className="rounded text-[#4A0A0F] focus:ring-[#4A0A0F]"
+                              />
+                            </td>
+                            <td className="p-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveVariantRow(idx)}
+                                className="text-red-500 hover:text-red-700 p-1"
+                                title="Remove variant"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+                ) : (
+                  <p className="text-xs text-stone-400 italic py-2">
+                    No variants created yet. This product is currently sold as a single-option product using the base price and stock above.
+                  </p>
                 )}
               </div>
 

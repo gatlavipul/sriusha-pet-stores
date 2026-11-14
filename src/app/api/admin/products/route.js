@@ -19,7 +19,9 @@ export async function GET(request) {
 
     let query = `
       SELECT p.*, c.name as category_name, sc.name as sub_category_name,
-        (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.id AND pi.is_default = true LIMIT 1) as default_image
+        (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.id AND pi.is_default = true LIMIT 1) as default_image,
+        (SELECT COUNT(*)::int FROM product_variants pv WHERE pv.product_id = p.id AND pv.needs_review = true) as unreviewed_variants_count,
+        (SELECT COUNT(*)::int FROM product_variants pv WHERE pv.product_id = p.id) as total_variants_count
       FROM products p 
       LEFT JOIN categories c ON p.category_id = c.id 
       LEFT JOIN sub_categories sc ON p.sub_category_id = sc.id
@@ -126,6 +128,43 @@ export async function POST(request) {
         { error: "Valid name, slug, positive price, and category are required." },
         { status: 400 }
       );
+    }
+
+    if (compare_price !== undefined && compare_price !== null && compare_price !== "") {
+      const parsedCompare = parseFloat(compare_price);
+      if (!isNaN(parsedCompare) && parsedCompare < parsedPrice) {
+        return Response.json(
+          { error: "Product MRP (compare price) cannot be lower than selling price." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate variants before inserting
+    if (Array.isArray(variants) && variants.length > 0) {
+      for (const v of variants) {
+        const vLabel = String(v?.label || "").trim();
+        const vPrice = parseFloat(v?.price || 0);
+        const vStock = parseInt(v?.stock_quantity ?? 0, 10);
+        if (!vLabel) {
+          return Response.json({ error: "Variant label cannot be empty." }, { status: 400 });
+        }
+        if (isNaN(vPrice) || vPrice <= 0) {
+          return Response.json({ error: `Variant "${vLabel}" price must be greater than 0.` }, { status: 400 });
+        }
+        if (isNaN(vStock) || vStock < 0) {
+          return Response.json({ error: `Variant "${vLabel}" stock cannot be negative.` }, { status: 400 });
+        }
+        if (v.compare_price !== undefined && v.compare_price !== null && v.compare_price !== "") {
+          const vCompare = parseFloat(v.compare_price);
+          if (!isNaN(vCompare) && vCompare < vPrice) {
+            return Response.json(
+              { error: `Variant "${vLabel}" MRP cannot be lower than selling price.` },
+              { status: 400 }
+            );
+          }
+        }
+      }
     }
 
     const products = await sql`

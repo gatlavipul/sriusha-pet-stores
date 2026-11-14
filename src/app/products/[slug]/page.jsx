@@ -77,22 +77,15 @@ export default function ProductDetailPage({ params }) {
             console.error("Recently viewed error:", e);
           }
 
-          // Variants
+          // Variants (only reviewed active variants are delivered by the server)
           if (Array.isArray(prod.variants) && prod.variants.length > 0) {
             const firstAvailable =
               prod.variants.find((v) => Number(v.stock_quantity) > 0) || prod.variants[0];
             setSelectedVariantObj(firstAvailable);
             setSelectedVariant(firstAvailable.label);
-          } else if (prod.weight) {
-            try {
-              const parsed = JSON.parse(prod.weight);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                setSelectedVariant(parsed[0].title || parsed[0]);
-              }
-            } catch {
-              const parts = prod.weight.split(",").map((s) => s.trim());
-              if (parts.length > 0) setSelectedVariant(parts[0]);
-            }
+          } else {
+            setSelectedVariantObj(null);
+            setSelectedVariant(null);
           }
 
           // Fetch related products
@@ -451,8 +444,8 @@ export default function ProductDetailPage({ params }) {
               </div>
             </div>
 
-            {/* Variants */}
-            {structuredVariants.length > 0 && (
+            {/* Variants Selector (Only reviewed variants are interactive) */}
+            {structuredVariants.length > 0 ? (
               <div className="mt-6">
                 <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
                   Select Pack Size / Weight:
@@ -489,7 +482,12 @@ export default function ProductDetailPage({ params }) {
                   })}
                 </div>
               </div>
-            )}
+            ) : product.weight ? (
+              <div className="mt-4 flex items-center gap-2 text-xs text-stone-600 bg-stone-50 border border-stone-200/80 rounded-xl px-3.5 py-2.5">
+                <span className="font-semibold text-stone-500">Available Size / Weight:</span>
+                <span className="font-bold text-stone-800">{product.weight}</span>
+              </div>
+            ) : null}
 
             {/* Quantity Selector and CTA Buttons */}
             <div className="mt-8 space-y-4">
