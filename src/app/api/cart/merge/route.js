@@ -22,13 +22,14 @@ export async function POST(request) {
 
       // Verify product exists and check stock
       const products = await sql`
-        SELECT p.id, p.stock_quantity, pv.stock_quantity as var_stock
+        SELECT p.id, p.stock_quantity, pv.stock_quantity as var_stock, pv.needs_review as var_needs_review
         FROM products p
         LEFT JOIN product_variants pv ON pv.id = ${variantId}
         WHERE p.id = ${productId}
         LIMIT 1
       `;
       if (products.length === 0) continue;
+      if (variantId && products[0].var_needs_review) continue;
 
       const product = products[0];
       const maxStock = Math.max(

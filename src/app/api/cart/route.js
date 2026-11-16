@@ -50,7 +50,7 @@ export async function POST(request) {
 
     // Check available stock on server
     const products = await sql`
-      SELECT p.*, pv.stock_quantity as var_stock, pv.is_active as var_active
+      SELECT p.*, pv.stock_quantity as var_stock, pv.is_active as var_active, pv.needs_review as var_needs_review
       FROM products p
       LEFT JOIN product_variants pv ON pv.id = ${variant_id}
       WHERE p.id = ${product_id}
@@ -61,6 +61,13 @@ export async function POST(request) {
     }
 
     const product = products[0];
+
+    if (variant_id && product.var_needs_review) {
+      return Response.json(
+        { error: "The selected size is pending review and cannot be purchased." },
+        { status: 400 }
+      );
+    }
     const availableStock = variant_id ? (product.var_stock ?? 0) : product.stock_quantity;
     const isActive = variant_id ? Boolean(product.var_active) : product.is_active;
 
