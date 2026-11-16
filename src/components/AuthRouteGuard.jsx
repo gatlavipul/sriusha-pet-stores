@@ -74,6 +74,25 @@ export function LoadingScreen({ onRetry, showRetry = false }) {
   );
 }
 
+export function isRouteProtected(pathname = "/") {
+  if (pathname.startsWith("/checkout")) return true;
+  if (pathname.startsWith("/admin")) return true;
+  if (pathname.startsWith("/delivery")) return true;
+  if (pathname.startsWith("/orders")) return true;
+  if (pathname.startsWith("/pets")) return true;
+  if (pathname.startsWith("/wishlist")) return true;
+  if (pathname.startsWith("/account")) {
+    if (
+      pathname.startsWith("/account/signin") ||
+      pathname.startsWith("/account/signup")
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 export default function AuthRouteGuard({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -86,6 +105,7 @@ export default function AuthRouteGuard({ children }) {
   const isAuthRoute =
     pathname.startsWith("/account/signin") ||
     pathname.startsWith("/account/signup");
+  const isProtected = isRouteProtected(pathname);
 
   useEffect(() => {
     setIsClient(true);
@@ -104,7 +124,7 @@ export default function AuthRouteGuard({ children }) {
   useEffect(() => {
     if (!isLoaded || !isClient) return;
 
-    if (!isSignedIn && !isAuthRoute) {
+    if (!isSignedIn && isProtected) {
       // Redirect signed-out users to sign in
       const search = location?.search || "";
       const currentFull = pathname + search;
@@ -114,10 +134,14 @@ export default function AuthRouteGuard({ children }) {
           : "";
       navigate(`/account/signin${callbackParam}`, { replace: true });
     } else if (isSignedIn && isAuthRoute) {
-      // Redirect signed-in users away from sign-in to home
-      navigate("/", { replace: true });
+      // Redirect signed-in users away from sign-in to callbackUrl or home
+      const searchParams = new URLSearchParams(location?.search || "");
+      const callbackUrl = searchParams.get("callbackUrl");
+      const target =
+        callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : "/";
+      navigate(target, { replace: true });
     }
-  }, [isLoaded, isSignedIn, isAuthRoute, pathname, isClient, navigate, location?.search]);
+  }, [isLoaded, isSignedIn, isProtected, isAuthRoute, pathname, isClient, navigate, location?.search]);
 
   // Missing publishable key error
   if (!publishableKey) {
@@ -165,7 +189,7 @@ export default function AuthRouteGuard({ children }) {
   }
 
   // 2. Signed out but trying to access a protected route: keep loading spinner during redirect
-  if (isLoaded && !isSignedIn && !isAuthRoute) {
+  if (isLoaded && !isSignedIn && isProtected) {
     return <LoadingScreen />;
   }
 

@@ -69,7 +69,12 @@ function InternalErrorBoundary({ error: errorArg }: { error?: unknown }) {
   const asyncError = useAsyncError();
   const error = errorArg ?? asyncError ?? routeError;
   const [isOpen, setIsOpen] = useState(false);
-  const shouldScale = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  const [shouldScale, setShouldScale] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setShouldScale(true);
+    }
+  }, []);
   const scaleFactor = shouldScale ? 1.02 : 1;
   const copyButtonTextClass = shouldScale ? 'text-sm' : 'text-xs';
   const copyButtonPaddingClass = shouldScale ? 'px-[10px] py-[5px]' : 'px-[6px] py-[3px]';
@@ -429,7 +434,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location?.pathname;
-  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  const [toasterPosition, setToasterPosition] = useState<'top-center' | 'bottom-right'>('bottom-right');
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setToasterPosition('top-center');
+    }
+  }, []);
   const clerkPublishableKey =
     (typeof process !== 'undefined' &&
       (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
@@ -496,7 +506,9 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <Meta />
         <Links />
-        <script type="module" src="/src/__create/dev-error-overlay.js"></script>
+        {import.meta.env?.DEV ? (
+          <script type="module" src="/src/__create/dev-error-overlay.js"></script>
+        ) : null}
         <link rel="icon" href="/src/__create/favicon.png" />
         {clerkPublishableKey ? (
           <>
@@ -572,10 +584,9 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         ) : null}
         <ClientOnly loader={() => children} />
-        <Toaster position={isMobile ? 'top-center' : 'bottom-right'} />
+        <Toaster position={toasterPosition} />
         <ScrollRestoration />
         <Scripts />
-        <script src="https://kit.fontawesome.com/2c15cc0cc7.js" crossOrigin="anonymous" async />
       </body>
     </html>
   );
