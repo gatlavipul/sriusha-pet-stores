@@ -86,9 +86,9 @@ export default function SignInPage() {
               className="h-12 w-12 object-contain"
             />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#4A0A0F]">
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-[#4A0A0F]">
             Sri Usha Pet Store
-          </h1>
+          </h2>
           <p className="mt-1 text-xs sm:text-sm font-semibold text-stone-600 max-w-xs">
             Welcome! Sign in to shop veterinary nutrition, treats, and same-day delivery across Hyderabad.
           </p>
@@ -114,9 +114,9 @@ export default function SignInPage() {
               signUpUrl="/account/signup"
               appearance={{
                 elements: {
-                  rootBox: "w-full max-w-full mx-auto",
-                  cardBox: "w-full max-w-full mx-auto shadow-none",
-                  card: "w-full max-w-full rounded-2xl border border-[#EADBCC] bg-white shadow-lg p-4 sm:p-6 mx-auto",
+                  rootBox: "w-full max-w-full mx-auto overflow-hidden",
+                  cardBox: "w-full max-w-full mx-auto shadow-none overflow-hidden",
+                  card: "w-full max-w-full rounded-2xl border border-[#EADBCC] bg-white shadow-lg p-3 sm:p-6 mx-auto box-border overflow-hidden",
                   headerTitle: "text-lg font-black text-[#4A0A0F]",
                   headerSubtitle: "text-xs text-stone-500",
                   socialButtonsBlockButton:

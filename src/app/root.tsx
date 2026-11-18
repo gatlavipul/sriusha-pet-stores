@@ -37,6 +37,14 @@ import { useDevServerHeartbeat } from '../__create/useDevServerHeartbeat';
 
 import appCss from './global.css?url';
 
+export const meta = () => [
+  { title: 'Sri Usha Pet Store | Veterinary & Pet Care Destination Hyderabad' },
+  { name: 'description', content: 'Hyperlocal veterinary pharmacy and pet care store in Uppal, Hyderabad. 45-min express delivery, vet medicines, and nutrition.' },
+  { property: 'og:title', content: 'Sri Usha Pet Store | Hyderabad' },
+  { property: 'og:description', content: 'Hyperlocal veterinary pharmacy and pet care store in Uppal, Hyderabad.' },
+  { property: 'og:image', content: '/brand/logo-full.png' },
+];
+
 export const links = () => [
   { rel: 'stylesheet', href: appCss },
 ];
@@ -434,9 +442,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location?.pathname;
+  // Always start with 'bottom-right' to match SSR; update client-side after mount
   const [toasterPosition, setToasterPosition] = useState<'top-center' | 'bottom-right'>('bottom-right');
+  const [isHydrated, setIsHydrated] = useState(false);
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    setIsHydrated(true);
+    if (window.innerWidth < 768) {
       setToasterPosition('top-center');
     }
   }, []);
@@ -504,12 +515,17 @@ export function Layout({ children }: { children: ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        {/* Preload critical Inter font weights to prevent FOIT */}
+        <link rel="preload" href="/fonts/inter-regular.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/inter-700.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/inter-800.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <Meta />
         <Links />
         {import.meta.env?.DEV ? (
           <script type="module" src="/src/__create/dev-error-overlay.js"></script>
         ) : null}
-        <link rel="icon" href="/src/__create/favicon.png" />
+        <link rel="icon" href="/brand/logo-mark.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/brand/logo-mark.png" />
         {clerkPublishableKey ? (
           <>
             <script
@@ -583,8 +599,8 @@ export function Layout({ children }: { children: ReactNode }) {
             </p>
           </div>
         ) : null}
-        <ClientOnly loader={() => children} />
-        <Toaster position={toasterPosition} />
+        {children}
+        {isHydrated ? <Toaster position={toasterPosition} /> : null}
         <ScrollRestoration />
         <Scripts />
       </body>

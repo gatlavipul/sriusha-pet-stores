@@ -154,6 +154,8 @@ export default function AuthRouteGuard({ children }) {
               e.currentTarget.src = "/brand/logo-mark.png";
             }}
             alt="Sri Usha Pet Store"
+            width={64}
+            height={64}
             className="mx-auto h-16 w-16 object-contain mb-4"
           />
           <h2 className="text-xl font-extrabold text-[#4A0A0F]">
@@ -175,7 +177,15 @@ export default function AuthRouteGuard({ children }) {
     );
   }
 
-  // 1. Initial hydration or Clerk loading state: show centered spinner with logo
+  // 1. For PUBLIC routes (not protected, not auth pages):
+  //    Render content immediately — do NOT wait for Clerk to load.
+  //    This prevents the loading spinner on /, /products, /cart, etc.
+  if (!isProtected && !isAuthRoute) {
+    return <>{children}</>;
+  }
+
+  // 2. Initial hydration or Clerk loading state on PROTECTED/AUTH routes:
+  //    Show centered spinner with logo
   if (!isLoaded && isClient) {
     return (
       <LoadingScreen
@@ -188,17 +198,17 @@ export default function AuthRouteGuard({ children }) {
     );
   }
 
-  // 2. Signed out but trying to access a protected route: keep loading spinner during redirect
+  // 3. Signed out but trying to access a protected route: keep loading spinner during redirect
   if (isLoaded && !isSignedIn && isProtected) {
     return <LoadingScreen />;
   }
 
-  // 3. Signed in but on signin/signup: keep loading spinner during redirect to home
+  // 4. Signed in but on signin/signup: keep loading spinner during redirect to home
   if (isLoaded && isSignedIn && isAuthRoute) {
     return <LoadingScreen />;
   }
 
-  // 4. Render children normally
+  // 5. Render children normally
   return <>{children}</>;
 }
 
