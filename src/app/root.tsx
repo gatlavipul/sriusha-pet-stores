@@ -521,9 +521,6 @@ export function Layout({ children }: { children: ReactNode }) {
         <link rel="preload" href="/fonts/inter-800.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <Meta />
         <Links />
-        {import.meta.env?.DEV ? (
-          <script type="module" src="/src/__create/dev-error-overlay.js"></script>
-        ) : null}
         <link rel="icon" href="/brand/logo-mark.png" type="image/png" />
         <link rel="apple-touch-icon" href="/brand/logo-mark.png" />
         {clerkPublishableKey ? (

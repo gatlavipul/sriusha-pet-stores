@@ -213,6 +213,34 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#FFFDF9] text-[#241819]">
+      {/* Local Business JSON-LD for Google Local SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "PetStore",
+            name: "Sri Usha Vet & Pet Stores",
+            image: "https://sriushapetstore.netlify.app/brand/logo-full.png",
+            telephone: "+919440274418",
+            url: "https://sriushapetstore.netlify.app",
+            address: {
+              "@type": "PostalAddress",
+              streetAddress: "Main Road, Uppal",
+              addressLocality: "Hyderabad",
+              addressRegion: "Telangana",
+              postalCode: "500039",
+              addressCountry: "IN",
+            },
+            geo: {
+              "@type": "GeoCoordinates",
+              latitude: 17.401756,
+              longitude: 78.569815,
+            },
+            priceRange: "₹₹",
+          }),
+        }}
+      />
       <Header />
 
       {/* 1. Slim Real Delivery Zone Bar (Shown once under Header on Home Page) */}
@@ -776,6 +804,37 @@ export default function HomePage() {
                 <li>
                   <a href="/orders" className="hover:text-white transition-colors">
                     Track Orders
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-bold text-white mb-3">Customer Support &amp; Info</h4>
+              <ul className="space-y-2 text-xs text-stone-400">
+                <li>
+                  <a href="/about" className="hover:text-white transition-colors">
+                    About Sri Usha
+                  </a>
+                </li>
+                <li>
+                  <a href="/contact" className="hover:text-white transition-colors">
+                    Contact &amp; Store Location
+                  </a>
+                </li>
+                <li>
+                  <a href="/faq" className="hover:text-white transition-colors">
+                    Delivery &amp; Prescription FAQ
+                  </a>
+                </li>
+                <li>
+                  <a href="/privacy" className="hover:text-white transition-colors">
+                    Privacy Policy
+                  </a>
+                </li>
+                <li>
+                  <a href="/terms" className="hover:text-white transition-colors">
+                    Terms &amp; Conditions
                   </a>
                 </li>
               </ul>
