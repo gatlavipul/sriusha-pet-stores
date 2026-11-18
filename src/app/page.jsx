@@ -212,7 +212,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] text-[#241819]">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#FFFDF9] text-[#241819]">
       {/* Local Business JSON-LD for Google Local SEO */}
       <script
         type="application/ld+json"
@@ -512,14 +512,14 @@ export default function HomePage() {
 
       {/* 6. Pet Pantry Low-Stock Reminder Banner */}
       {pantryAlerts.length > 0 && (
-        <section className="py-5 bg-[#FFF7ED] border-b border-[#FED7AA]">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-3">
+        <section className="py-5 bg-[#FFF7ED] border-b border-[#FED7AA] overflow-hidden">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white border border-[#FED7AA] text-[#F97316]">
                 <Package size={20} strokeWidth={1.75} />
               </div>
-              <div>
-                <p className="text-sm font-extrabold text-[#4A0A0F]">
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-[#4A0A0F] break-words">
                   {pantryAlerts[0].pet_name ? `${pantryAlerts[0].pet_name}'s ` : "Your "}
                   {pantryAlerts[0].product_name} is ~{pantryAlerts[0].percent_consumed}% used
                   {pantryAlerts[0].estimated_days_remaining > 0
@@ -581,7 +581,7 @@ export default function HomePage() {
                     View Past Orders →
                   </a>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   {buyAgainItems.map((item) => (
                     <div
                       key={`${item.product_id}-${item.variant_id || "base"}`}
@@ -625,7 +625,7 @@ export default function HomePage() {
             {recentlyViewed.length > 0 && (
               <div>
                 <h2 className="text-lg font-extrabold text-[#4A0A0F] mb-4">Recently Viewed</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   {recentlyViewed.map((item) => (
                     <a
                       key={item.id}
